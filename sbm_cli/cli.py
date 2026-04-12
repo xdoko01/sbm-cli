@@ -253,3 +253,139 @@ def get(ctx: AppContext, ticket_id: str, fields: str | None) -> None:
         click.echo(formatters.format_ticket(item))
     else:
         ctx.output("get", item)
+
+
+# ---------------------------------------------------------------------------
+# transition helpers
+# ---------------------------------------------------------------------------
+
+def _parse_fields(field_args: tuple) -> dict:
+    """Parse ('KEY=VALUE', ...) into a dict with int coercion where possible."""
+    result: dict = {}
+    for arg in field_args:
+        if "=" not in arg:
+            raise click.BadParameter(f"Field must be KEY=VALUE, got: {arg!r}")
+        key, _, value = arg.partition("=")
+        try:
+            result[key] = int(value)
+        except ValueError:
+            result[key] = value
+    return result
+
+
+def _apply_field_types(field_values: dict, field_types: dict) -> dict:
+    """Apply field type transformations declared in TransitionConfig.field_types."""
+    result = dict(field_values)
+    for field_name, ftype in field_types.items():
+        if ftype == "list" and field_name in result:
+            val = result[field_name]
+            if not isinstance(val, list):
+                result[field_name] = [val]
+    return result
+
+
+def _run_pre_transition(ctx: AppContext, table_id: int, item_id: int,
+                        pre_id: int, optional: bool) -> None:
+    """
+    Execute a pre-transition (e.g. 'Start Solving' before 'Resolved').
+    If optional=True, swallows SBMError (ticket already in correct state).
+    """
+    try:
+        lock_id = ctx.client.start_transition(table_id, item_id, pre_id, break_lock=True)
+        ctx.client.update_item(table_id, item_id, field_values={}, transition_id=pre_id, record_lock_id=lock_id)
+    except SBMError:
+        if not optional:
+            raise
+
+
+# ---------------------------------------------------------------------------
+# transition command
+# ---------------------------------------------------------------------------
+
+@main.command()
+@click.argument("name")
+@click.argument("ticket_id")
+@click.option("--id", "transition_id", default=None, type=int,
+              help="Transition ID (required when NAME is 'run')")
+@click.option("--field", "field_args", multiple=True, metavar="KEY=VALUE",
+              help="Field value to set (repeatable)")
+@pass_ctx
+def transition(ctx: AppContext, name: str, ticket_id: str,
+               transition_id: int | None, field_args: tuple) -> None:
+    """Run a named transition or a raw transition by ID.
+
+    Named:  sbm transition assign 02440942 --field OWNER=316
+    Raw:    sbm transition run 02440942 --id 155 --field OWNER=316
+    """
+    result: dict = {}
+
+    # ---- raw mode ----------------------------------------------------------
+    if name == "run":
+        if transition_id is None:
+            ctx.error("transition", "validation_error",
+                      "'sbm transition run' requires --id TRANSITION_ID", exit_code=3)
+        field_values = _parse_fields(field_args)
+        try:
+            data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id)
+            item_id: int = data["item"]["id"]["id"]
+            lock_id = ctx.client.start_transition(ctx.config.table_id, item_id,
+                                                  transition_id, break_lock=True)
+            result = ctx.client.update_item(
+                ctx.config.table_id, item_id,
+                field_values=field_values,
+                transition_id=transition_id, record_lock_id=lock_id,
+            )
+        except PermissionError as exc:
+            ctx.error("transition", "auth_error", str(exc), exit_code=2)
+        except (SBMError, ValueError) as exc:
+            field = exc.field if isinstance(exc, SBMError) else None
+            ctx.error("transition", "api_error", str(exc), field=field, exit_code=1)
+        if ctx.pretty:
+            click.echo(f"Transition {transition_id} completed on {ticket_id}")
+        else:
+            ctx.output("transition", result)
+        return
+
+    # ---- named mode --------------------------------------------------------
+    t = ctx.config.transitions.get(name)
+    if t is None:
+        known = ", ".join(ctx.config.transitions) or "none"
+        ctx.error("transition", "config_error",
+                  f"Unknown transition '{name}'. Configured: {known}", exit_code=2)
+    assert t is not None  # narrowing for type checker
+
+    field_values = _parse_fields(field_args)
+
+    missing = [f for f in t.fields if f not in field_values]
+    if missing:
+        ctx.error("transition", "validation_error",
+                  f"Missing required fields for '{name}': {', '.join(missing)}",
+                  exit_code=3)
+
+    field_values = _apply_field_types(field_values, t.field_types)
+
+    try:
+        data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id)
+        item_id = data["item"]["id"]["id"]
+
+        # Execute optional pre-transition (e.g. "Start Solving" before "Resolved")
+        if t.pre_transition_id is not None:
+            _run_pre_transition(ctx, ctx.config.table_id, item_id,
+                                t.pre_transition_id, t.pre_transition_optional)
+
+        lock_id = ctx.client.start_transition(ctx.config.table_id, item_id, t.id, break_lock=True)
+        result = ctx.client.update_item(
+            ctx.config.table_id, item_id,
+            field_values=field_values,
+            transition_id=t.id, record_lock_id=lock_id,
+        )
+    except PermissionError as exc:
+        ctx.error("transition", "auth_error", str(exc), exit_code=2)
+    except (SBMError, ValueError) as exc:
+        field = exc.field if isinstance(exc, SBMError) else None
+        ctx.error("transition", "api_error", str(exc), field=field, exit_code=1)
+
+    if ctx.pretty:
+        click.echo(f"Transition '{name}' completed on {ticket_id}")
+    else:
+        ctx.output("transition", result)

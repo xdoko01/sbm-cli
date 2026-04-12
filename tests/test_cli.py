@@ -207,3 +207,161 @@ def test_get_auth_error(runner: CliRunner):
     assert result.exit_code == 2
     data = json.loads(result.output)
     assert data["error"]["type"] == "auth_error"
+
+
+# ---------------------------------------------------------------------------
+# transition (named)
+# ---------------------------------------------------------------------------
+
+def _mock_transition(MockClient, lock_id: int = 42) -> None:
+    """Configure mock client for a successful transition flow."""
+    MockClient.return_value.get_item_by_display_id.return_value = {
+        "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+        "result": {"type": "OK"},
+    }
+    MockClient.return_value.start_transition.return_value = lock_id
+    MockClient.return_value.update_item.return_value = {
+        "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+    }
+
+
+def test_transition_assign_success(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=316", "--field", "3RD_LEVEL_SPECIALIST=316"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["ok"] is True
+    assert data["command"] == "transition"
+    # Verify start_transition was called with transition id=155
+    MockClient.return_value.start_transition.assert_called_once_with(1000, 100, 155, break_lock=True)
+    # Verify update_item was called with correct field values
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["transition_id"] == 155
+    assert call_kwargs["field_values"]["OWNER"] == 316
+
+
+def test_transition_missing_required_field(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient"):
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942", "--field", "OWNER=316"],
+                # Missing 3RD_LEVEL_SPECIALIST
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 3
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "validation_error"
+    assert "3RD_LEVEL_SPECIALIST" in data["error"]["message"]
+
+
+def test_transition_unknown_name(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient"):
+            result = runner.invoke(
+                main, ["transition", "foobar", "02440942"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 2
+    data = json.loads(result.output)
+    assert data["error"]["type"] == "config_error"
+
+
+def test_transition_transfer_wraps_list_field(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            runner.invoke(
+                main,
+                ["transition", "transfer", "02440942",
+                 "--field", "L3_SPECIALIST_GROUP=155"],
+                catch_exceptions=False,
+            )
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["L3_SPECIALIST_GROUP"] == [155]
+
+
+def test_transition_close_runs_pre_transition(runner: CliRunner):
+    """close has pre_transition_id=148 — must call start_transition + update_item twice."""
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            runner.invoke(
+                main,
+                ["transition", "close", "02440942",
+                 "--field", "RESOLUTION=Fixed", "--field", "ROOT_CAUSE=1701"],
+                catch_exceptions=False,
+            )
+    # start_transition called twice: once for pre (148), once for main (19)
+    assert MockClient.return_value.start_transition.call_count == 2
+    ids_called = [c[0][2] for c in MockClient.return_value.start_transition.call_args_list]
+    assert 148 in ids_called
+    assert 19 in ids_called
+
+
+def test_transition_close_pre_transition_failure_is_ignored(runner: CliRunner):
+    """If pre_transition_optional=True, SBMError from pre-transition is ignored."""
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.get_item_by_display_id.return_value = {
+                "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+                "result": {"type": "OK"},
+            }
+            # Pre-transition fails (ticket already in solving state)
+            mock_client.start_transition.side_effect = [
+                SBMError("privilege denied"),  # pre-transition fails
+                42,                            # main transition succeeds
+            ]
+            mock_client.update_item.return_value = {
+                "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+            }
+            result = runner.invoke(
+                main,
+                ["transition", "close", "02440942",
+                 "--field", "RESOLUTION=Fixed", "--field", "ROOT_CAUSE=1701"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# transition run (raw)
+# ---------------------------------------------------------------------------
+
+def test_transition_run_calls_with_given_id(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            result = runner.invoke(
+                main,
+                ["transition", "run", "02440942", "--id", "99",
+                 "--field", "SOME_FIELD=hello"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["transition_id"] == 99
+    assert call_kwargs["field_values"]["SOME_FIELD"] == "hello"
+
+
+def test_transition_run_requires_id_flag(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient"):
+            result = runner.invoke(
+                main, ["transition", "run", "02440942"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 3
+    data = json.loads(result.output)
+    assert data["error"]["type"] == "validation_error"

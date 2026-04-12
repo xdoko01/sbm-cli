@@ -5,3 +5,7 @@ dist/
 *.egg-info/
 .env
 .pytest_cache/
+build/
+.coverage
+htmlcov/
+.mypy_cache/

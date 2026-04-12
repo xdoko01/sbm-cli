@@ -17,8 +17,8 @@ sbm = "sbm_cli.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0",
     "pytest-mock>=3.14",
 ]

@@ -430,3 +430,32 @@ def test_field_values_api_error(runner: CliRunner):
     assert result.exit_code == 1
     data = json.loads(result.stdout)
     assert data["error"]["type"] == "api_error"
+
+
+# ---------------------------------------------------------------------------
+# --indent flag
+# ---------------------------------------------------------------------------
+
+def test_indent_flag_formats_json(runner: CliRunner):
+    result = _invoke(runner, ["--indent", "schema"])
+    assert result.exit_code == 0
+    assert "\n  " in result.stdout  # indented JSON has nested newlines
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+
+
+def test_indent_flag_formats_error_json(runner: CliRunner):
+    from sbm_cli.config import ConfigError
+    with patch("sbm_cli.cli.load_config", side_effect=ConfigError("not found")):
+        result = runner.invoke(main, ["--indent", "schema"], catch_exceptions=False)
+    assert result.exit_code == 2
+    assert "\n  " in result.stdout
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+
+
+def test_no_indent_by_default(runner: CliRunner):
+    result = _invoke(runner, ["schema"])
+    assert result.exit_code == 0
+    # compact JSON has no leading spaces
+    assert result.stdout.startswith('{"ok"')

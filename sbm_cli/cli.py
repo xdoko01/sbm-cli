@@ -20,10 +20,11 @@ from sbm_cli import formatters
 # ---------------------------------------------------------------------------
 
 class AppContext:
-    def __init__(self, config: Config, pretty: bool, quiet: bool) -> None:
+    def __init__(self, config: Config, pretty: bool, quiet: bool, indent: bool = False) -> None:
         self.config = config
         self.pretty = pretty
         self.quiet = quiet
+        self.indent = indent
         self._client: SBMClient | None = None
 
     @property
@@ -44,7 +45,8 @@ class AppContext:
 
     def output(self, command: str, data: object) -> None:
         """Write a successful JSON response to stdout."""
-        click.echo(json.dumps({"ok": True, "command": command, "data": data}))
+        envelope = {"ok": True, "command": command, "data": data}
+        click.echo(json.dumps(envelope, indent=2 if self.indent else None))
 
     def error(self, command: str, error_type: str, message: str,
                field: str | None = None, exit_code: int = 1) -> None:
@@ -52,7 +54,8 @@ class AppContext:
         err: dict = {"type": error_type, "message": message}
         if field:
             err["field"] = field
-        click.echo(json.dumps({"ok": False, "command": command, "error": err}))
+        click.echo(json.dumps({"ok": False, "command": command, "error": err},
+                               indent=2 if self.indent else None))
         sys.exit(exit_code)
 
 
@@ -68,20 +71,22 @@ pass_ctx = click.make_pass_decorator(AppContext)
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="Override config file location")
 @click.option("--quiet", is_flag=True, help="Suppress stderr status messages")
+@click.option("--indent", is_flag=True, help="Output formatted JSON with indentation")
 @click.pass_context
-def main(ctx: click.Context, pretty: bool, config_path: str | None, quiet: bool) -> None:
+def main(ctx: click.Context, pretty: bool, config_path: str | None,
+         quiet: bool, indent: bool) -> None:
     """SBM 12.0 JSON API command-line client."""
     config_file = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet)
+        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet, indent)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet)
+        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet, indent)
         return
 
     try:
@@ -91,10 +96,10 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None, quiet: bool)
             "ok": False,
             "command": ctx.invoked_subcommand or "",
             "error": {"type": "config_error", "message": str(exc)},
-        }))
+        }, indent=2 if indent else None))
         sys.exit(2)
 
-    ctx.obj = AppContext(config, pretty, quiet)
+    ctx.obj = AppContext(config, pretty, quiet, indent)
 
 
 # ---------------------------------------------------------------------------

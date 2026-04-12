@@ -26,6 +26,11 @@ class TeamConfig:
 
 
 @dataclass
+class UserConfig:
+    id: int
+
+
+@dataclass
 class Config:
     host: str
     username: str
@@ -35,6 +40,7 @@ class Config:
     report_id: int
     transitions: dict[str, TransitionConfig] = field(default_factory=dict)
     teams: dict[str, TeamConfig] = field(default_factory=dict)
+    users: dict[str, UserConfig] = field(default_factory=dict)
 
 
 class ConfigError(Exception):
@@ -88,6 +94,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         except KeyError as exc:
             raise ConfigError(f"Team '{slug}' missing required key: {exc}") from exc
 
+    users: dict[str, UserConfig] = {}
+    for login, raw in data.get("users", {}).items():
+        if isinstance(raw, dict):
+            try:
+                users[login] = UserConfig(id=raw["id"])
+            except KeyError as exc:
+                raise ConfigError(f"User '{login}' missing required key: {exc}") from exc
+        elif isinstance(raw, int):
+            users[login] = UserConfig(id=raw)
+
     return Config(
         host=conn["host"],
         username=conn["username"],
@@ -97,6 +113,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         report_id=defaults.get("report_id", 0),
         transitions=transitions,
         teams=teams,
+        users=users,
     )
 
 
@@ -151,6 +168,15 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         lines.append("[teams]")
         for slug, team in config.teams.items():
             lines.append(f'{slug} = {{ id = {team.id}, name = "{_toml_str(team.name)}" }}')
+
+    if config.users:
+        lines.append("")
+        lines.append("[users]")
+        for login, user in config.users.items():
+            if _BARE_KEY_RE.match(login):
+                lines.append(f'{login} = {{ id = {user.id} }}')
+            else:
+                lines.append(f'"{_toml_str(login)}" = {{ id = {user.id} }}')
 
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")

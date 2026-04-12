@@ -297,6 +297,14 @@ def _apply_field_types(field_values: dict, field_types: dict) -> dict:
     return result
 
 
+def _resolve_users(field_values: dict, users: dict) -> dict:
+    """Replace string field values matching a configured user login with their numeric ID."""
+    return {
+        k: users[v].id if isinstance(v, str) and v in users else v
+        for k, v in field_values.items()
+    }
+
+
 def _run_pre_transition(ctx: AppContext, table_id: int, item_id: int,
                         pre_id: int, optional: bool) -> None:
     """
@@ -338,6 +346,7 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
             ctx.error("transition", "validation_error",
                       "'sbm transition run' requires --id TRANSITION_ID", exit_code=3)
         field_values = _parse_fields(field_args)
+        field_values = _resolve_users(field_values, ctx.config.users)
         try:
             data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id)
             item_id: int = data["item"]["id"]["id"]
@@ -369,6 +378,7 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
     assert t is not None  # narrowing for type checker
 
     field_values = _parse_fields(field_args)
+    field_values = _resolve_users(field_values, ctx.config.users)
 
     missing = [f for f in t.fields if f not in field_values]
     if missing:

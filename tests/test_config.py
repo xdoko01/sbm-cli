@@ -176,3 +176,46 @@ def test_pre_transition_optional_without_id_roundtrip(tmp_path):
     reloaded = load_config(cfg_file)
     assert reloaded.transitions["mytr"].pre_transition_optional is True
     assert reloaded.transitions["mytr"].pre_transition_id is None
+
+
+def test_load_config_parses_users(tmp_path):
+    from sbm_cli.config import UserConfig
+    toml_content = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+password = "p"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_id = 0
+
+[users]
+alice = { id = 316 }
+"jaroslav.burget" = { id = 15399 }
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml_content, encoding="utf-8")
+    config = load_config(path)
+    assert "alice" in config.users
+    assert config.users["alice"].id == 316
+    assert "jaroslav.burget" in config.users
+    assert config.users["jaroslav.burget"].id == 15399
+
+
+def test_save_config_round_trips_users(tmp_path):
+    from sbm_cli.config import UserConfig
+    config = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+        users={
+            "alice": UserConfig(id=316),
+            "jaroslav.burget": UserConfig(id=15399),
+        },
+    )
+    path = tmp_path / "config.toml"
+    save_config(config, path)
+    loaded = load_config(path)
+    assert loaded.users["alice"].id == 316
+    assert loaded.users["jaroslav.burget"].id == 15399

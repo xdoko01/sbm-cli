@@ -367,6 +367,45 @@ def test_transition_run_requires_id_flag(runner: CliRunner):
     assert data["error"]["type"] == "validation_error"
 
 
+def test_transition_resolves_username_to_id(runner: CliRunner):
+    from sbm_cli.config import UserConfig
+    config = _make_app_config()
+    config.users["jaroslav.burget"] = UserConfig(id=15399)
+    with patch("sbm_cli.cli.load_config", return_value=config):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=jaroslav.burget",
+                 "--field", "3RD_LEVEL_SPECIALIST=jaroslav.burget"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["OWNER"] == 15399
+    assert call_kwargs["field_values"]["3RD_LEVEL_SPECIALIST"] == 15399
+
+
+def test_transition_unknown_string_field_passes_through(runner: CliRunner):
+    """String field values not matching any configured user login pass through unchanged."""
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            _mock_transition(MockClient)
+            runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=bob.unknown",
+                 "--field", "3RD_LEVEL_SPECIALIST=316"],
+                catch_exceptions=False,
+            )
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    # "bob.unknown" is not in config.users (empty by default) — passes through as string
+    assert call_kwargs["field_values"]["OWNER"] == "bob.unknown"
+    # Numeric strings are still coerced to int by _parse_fields
+    assert call_kwargs["field_values"]["3RD_LEVEL_SPECIALIST"] == 316
+
+
 # ---------------------------------------------------------------------------
 # field-values
 # ---------------------------------------------------------------------------

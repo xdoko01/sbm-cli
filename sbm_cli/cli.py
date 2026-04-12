@@ -449,3 +449,38 @@ def field_values(ctx: AppContext, field_name: str, table_id: int, max_probe: int
         click.echo(formatters.format_field_values(items))
     else:
         ctx.output("field-values", {"field": field_name, "table_id": table_id, "values": items})
+
+
+# ---------------------------------------------------------------------------
+# fields
+# ---------------------------------------------------------------------------
+
+@main.command("fields")
+@click.argument("ticket_id")
+@click.option("--table", "table_id", default=None, type=int,
+              help="Table ID (defaults to configured table_id)")
+@pass_ctx
+def fields_cmd(ctx: AppContext, ticket_id: str, table_id: int | None) -> None:
+    """List field definitions by inspecting a sample ticket.
+
+    Fetches TICKET_ID and reports all field dbnames, inferred types, and labels.
+    Uses the configured table_id by default; override with --table.
+
+    Example: sbm fields 02440942
+    """
+    tid = table_id if table_id is not None else ctx.config.table_id
+    ctx.status(f"Fetching field definitions from ticket {ticket_id}...")
+    field_defs: list = []
+    try:
+        field_defs = ctx.client.get_field_definitions(ticket_id, tid)
+    except PermissionError as exc:
+        ctx.error("fields", "auth_error", str(exc), exit_code=2)
+    except ValueError as exc:
+        ctx.error("fields", "api_error", str(exc), exit_code=1)
+    except SBMError as exc:
+        ctx.error("fields", "api_error", str(exc), field=exc.field, exit_code=1)
+
+    if ctx.pretty:
+        click.echo(formatters.format_field_definitions(field_defs))
+    else:
+        ctx.output("fields", {"ticket_id": ticket_id, "table_id": tid, "fields": field_defs})

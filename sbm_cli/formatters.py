@@ -95,3 +95,15 @@ def format_field_values(items: list[dict]) -> str:
         table.add_row(str(item.get("id", "")), item.get("name", ""))
     c.print(table)
     return c.file.getvalue()
+
+
+def format_field_definitions(fields: list[dict]) -> str:
+    c = _console()
+    table = Table(box=box.SIMPLE_HEAD, show_edge=False)
+    table.add_column("DB Name", style="cyan")
+    table.add_column("Type", style="yellow")
+    table.add_column("Label")
+    for f in fields:
+        table.add_row(f.get("dbname", ""), f.get("type", ""), f.get("label", ""))
+    c.print(table)
+    return c.file.getvalue()

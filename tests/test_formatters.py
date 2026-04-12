@@ -97,3 +97,16 @@ def test_format_ticket_list_default_columns_unchanged():
     output = formatters.format_ticket_list(items)  # no columns arg
     assert "Ticket" in output
     assert "Open" in output
+
+
+def test_format_field_definitions():
+    from sbm_cli.formatters import format_field_definitions
+    fields = [
+        {"dbname": "OWNER", "type": "relational", "label": "Owner"},
+        {"dbname": "TITLE", "type": "text", "label": "Title"},
+    ]
+    output = format_field_definitions(fields)
+    assert "OWNER" in output
+    assert "relational" in output
+    assert "TITLE" in output
+    assert "text" in output

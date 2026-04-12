@@ -141,6 +141,32 @@ class SBMClient:
 
         return sorted(results, key=lambda x: x["id"])
 
+    def get_field_definitions(self, display_id: str, table_id: int) -> list[dict]:
+        """Fetch field definitions by inspecting a sample ticket.
+
+        Returns a sorted list of {dbname, type, label} dicts.
+        'type' is inferred: 'relational' for {id, name} values,
+        'numeric' for ints/floats, 'text' otherwise.
+        'label' comes from 'displayName' in the API response if present,
+        otherwise falls back to dbname.
+        """
+        data = self.get_item_by_display_id(display_id, table_id, fields=None)
+        item = data.get("item", {})
+        result: list[dict] = []
+        for dbname, fdata in item.get("fields", {}).items():
+            if not isinstance(fdata, dict):
+                continue
+            value = fdata.get("value")
+            if isinstance(value, dict) and "id" in value:
+                field_type = "relational"
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                field_type = "numeric"
+            else:
+                field_type = "text"
+            label = fdata.get("displayName", dbname)
+            result.append({"dbname": dbname, "type": field_type, "label": label})
+        return sorted(result, key=lambda x: x["dbname"])
+
     def _post(self, url: str, body: dict, params: dict | None = None) -> dict:
         resp = self._session.post(url, json=body, params=params, timeout=30)
         if resp.status_code == 401:

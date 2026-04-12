@@ -521,3 +521,71 @@ def test_list_pretty_uses_requested_columns(runner: CliRunner):
     assert result.exit_code == 0
     assert "My Ticket" in result.output
     assert "High" in result.output
+
+
+# ---------------------------------------------------------------------------
+# fields
+# ---------------------------------------------------------------------------
+
+def test_fields_command_returns_json(runner: CliRunner):
+    mock_fields = [
+        {"dbname": "OWNER", "type": "relational", "label": "Owner"},
+        {"dbname": "TITLE", "type": "text", "label": "TITLE"},
+    ]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.return_value = mock_fields
+            result = runner.invoke(
+                main,
+                ["fields", "02440942"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+    assert data["command"] == "fields"
+    assert data["data"]["ticket_id"] == "02440942"
+    assert data["data"]["table_id"] == 1000
+    assert len(data["data"]["fields"]) == 2
+    assert data["data"]["fields"][0]["dbname"] == "OWNER"
+
+
+def test_fields_command_pretty(runner: CliRunner):
+    mock_fields = [{"dbname": "TITLE", "type": "text", "label": "TITLE"}]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.return_value = mock_fields
+            result = runner.invoke(
+                main,
+                ["--pretty", "fields", "02440942"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    assert "TITLE" in result.output
+
+
+def test_fields_command_custom_table(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.return_value = []
+            runner.invoke(
+                main,
+                ["fields", "02440942", "--table", "9999"],
+                catch_exceptions=False,
+            )
+    MockClient.return_value.get_field_definitions.assert_called_once_with("02440942", 9999)
+
+
+def test_fields_command_not_found(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.side_effect = ValueError("No item found")
+            result = runner.invoke(
+                main,
+                ["fields", "9999999"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "api_error"

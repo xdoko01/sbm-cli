@@ -108,3 +108,40 @@ def test_auth_error_raises_permission_error(mocker):
     client._session = mock_session
     with pytest.raises(PermissionError):
         client.check_auth()
+
+
+def test_get_field_definitions_returns_sorted_list(mocker):
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "TITLE": {"value": "Test ticket"},
+                "OWNER": {"value": {"id": 316, "name": "Smith, Alice"}},
+                "PRIORITY": {"value": 2},
+            }
+        }],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.return_value = mock_resp
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    fields = client.get_field_definitions("02440942", 1000)
+
+    assert isinstance(fields, list)
+    dbnames = [f["dbname"] for f in fields]
+    assert "TITLE" in dbnames
+    assert "OWNER" in dbnames
+    assert "PRIORITY" in dbnames
+    # Should be sorted alphabetically
+    assert dbnames == sorted(dbnames)
+    # Type inference
+    owner = next(f for f in fields if f["dbname"] == "OWNER")
+    assert owner["type"] == "relational"
+    title = next(f for f in fields if f["dbname"] == "TITLE")
+    assert title["type"] == "text"
+    priority = next(f for f in fields if f["dbname"] == "PRIORITY")
+    assert priority["type"] == "numeric"

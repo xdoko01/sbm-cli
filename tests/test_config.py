@@ -4,7 +4,6 @@ from pathlib import Path
 from sbm_cli.config import (
     Config, TransitionConfig, TeamConfig,
     ConfigError, load_config, save_config, DEFAULT_CONFIG_PATH,
-    _validate_toml_key,
 )
 
 VALID_TOML = """\

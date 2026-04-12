@@ -219,3 +219,49 @@ def test_save_config_round_trips_users(tmp_path):
     loaded = load_config(path)
     assert loaded.users["alice"].id == 316
     assert loaded.users["jaroslav.burget"].id == 15399
+
+
+def test_load_config_parses_fields(tmp_path):
+    from sbm_cli.config import FieldDef
+    toml_content = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+password = "p"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_id = 0
+
+[fields]
+TITLE = { type = "text", label = "Title" }
+OWNER = { type = "relational", label = "Owner" }
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml_content, encoding="utf-8")
+    config = load_config(path)
+    assert "TITLE" in config.fields
+    assert config.fields["TITLE"].type == "text"
+    assert config.fields["TITLE"].label == "Title"
+    assert "OWNER" in config.fields
+    assert config.fields["OWNER"].type == "relational"
+
+
+def test_save_config_round_trips_fields(tmp_path):
+    from sbm_cli.config import FieldDef
+    config = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+        fields={
+            "TITLE": FieldDef(dbname="TITLE", type="text", label="Title"),
+            "OWNER": FieldDef(dbname="OWNER", type="relational", label="Owner"),
+        },
+    )
+    path = tmp_path / "config.toml"
+    save_config(config, path)
+    loaded = load_config(path)
+    assert loaded.fields["TITLE"].type == "text"
+    assert loaded.fields["TITLE"].label == "Title"
+    assert loaded.fields["OWNER"].type == "relational"
+    assert loaded.fields["OWNER"].label == "Owner"

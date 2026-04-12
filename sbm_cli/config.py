@@ -31,6 +31,13 @@ class UserConfig:
 
 
 @dataclass
+class FieldDef:
+    dbname: str
+    type: str = "text"
+    label: str = ""
+
+
+@dataclass
 class Config:
     host: str
     username: str
@@ -41,6 +48,7 @@ class Config:
     transitions: dict[str, TransitionConfig] = field(default_factory=dict)
     teams: dict[str, TeamConfig] = field(default_factory=dict)
     users: dict[str, UserConfig] = field(default_factory=dict)
+    fields: dict[str, FieldDef] = field(default_factory=dict)
 
 
 class ConfigError(Exception):
@@ -104,6 +112,16 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         elif isinstance(raw, int):
             users[login] = UserConfig(id=raw)
 
+    field_defs: dict[str, FieldDef] = {}
+    for dbname, raw in data.get("fields", {}).items():
+        if not isinstance(raw, dict):
+            continue
+        field_defs[dbname] = FieldDef(
+            dbname=dbname,
+            type=raw.get("type", "text"),
+            label=raw.get("label", dbname),
+        )
+
     return Config(
         host=conn["host"],
         username=conn["username"],
@@ -114,6 +132,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         transitions=transitions,
         teams=teams,
         users=users,
+        fields=field_defs,
     )
 
 
@@ -177,6 +196,15 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
                 lines.append(f'{login} = {{ id = {user.id} }}')
             else:
                 lines.append(f'"{_toml_str(login)}" = {{ id = {user.id} }}')
+
+    if config.fields:
+        lines.append("")
+        lines.append("[fields]")
+        for dbname, fdef in config.fields.items():
+            _validate_toml_key(dbname, "fields")
+            lines.append(
+                f'{dbname} = {{ type = "{_toml_str(fdef.type)}", label = "{_toml_str(fdef.label)}" }}'
+            )
 
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")

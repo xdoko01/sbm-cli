@@ -9,7 +9,7 @@ import click
 
 from sbm_cli.client import SBMClient, SBMError
 from sbm_cli.config import (
-    Config, ConfigError, TransitionConfig,
+    Config, ConfigError, FieldDef, TransitionConfig, UserConfig,
     load_config, save_config, DEFAULT_CONFIG_PATH,
 )
 from sbm_cli import formatters
@@ -127,6 +127,7 @@ def configure(ctx: click.Context) -> None:
     click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
 
     click.echo("Testing connection...", err=True)
+    client = None
     try:
         client = SBMClient(host, username, password, verify_ssl)
         client.check_auth()
@@ -143,6 +144,29 @@ def configure(ctx: click.Context) -> None:
         else:
             click.echo(f"Connection test failed: {exc}", err=True)
         sys.exit(2)
+
+    # Optional: discover field definitions from a sample ticket
+    sample_id = click.prompt(
+        "Sample ticket ID for field discovery (leave blank to skip)",
+        default="",
+    )
+    if sample_id.strip():
+        click.echo("Fetching field definitions...", err=True)
+        try:
+            raw_defs = client.get_field_definitions(sample_id.strip(), table_id)
+            config.fields = {
+                f["dbname"]: FieldDef(
+                    dbname=f["dbname"],
+                    type=f.get("type", "text"),
+                    label=f.get("label", f["dbname"]),
+                )
+                for f in raw_defs
+                if "dbname" in f
+            }
+            save_config(config)
+            click.echo(f"Stored {len(config.fields)} field definitions.", err=True)
+        except Exception as exc:
+            click.echo(f"Field discovery failed (skipping): {exc}", err=True)
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +195,11 @@ def schema(ctx: AppContext) -> None:
             for slug, team in cfg.teams.items()
         },
     }
+    if cfg.fields:
+        data["fields"] = {
+            dbname: {"type": fdef.type, "label": fdef.label}
+            for dbname, fdef in cfg.fields.items()
+        }
     if ctx.pretty:
         click.echo(formatters.format_schema(data))
     else:

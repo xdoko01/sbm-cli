@@ -69,6 +69,12 @@ def format_schema(schema: dict) -> str:
         lines.append(f"  {slug}: {team.get('name')} (id={team.get('id')})")
     if not schema.get("teams"):
         lines.append("  (none configured)")
+    if schema.get("fields"):
+        lines += ["", "Fields:"]
+        for dbname, fdef in schema["fields"].items():
+            label = fdef.get("label", dbname)
+            ftype = fdef.get("type", "text")
+            lines.append(f"  {dbname} ({ftype}): {label}")
     return "\n".join(lines)
 
 

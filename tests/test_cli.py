@@ -589,3 +589,118 @@ def test_fields_command_not_found(runner: CliRunner):
     data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["type"] == "api_error"
+
+
+# ---------------------------------------------------------------------------
+# schema fields
+# ---------------------------------------------------------------------------
+
+def test_schema_includes_fields_when_configured(runner: CliRunner):
+    from sbm_cli.config import FieldDef
+    config = _make_app_config()
+    config.fields = {
+        "TITLE": FieldDef(dbname="TITLE", type="text", label="Title"),
+        "OWNER": FieldDef(dbname="OWNER", type="relational", label="Owner"),
+    }
+    result = _invoke(runner, ["schema"], config=config)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert "fields" in data["data"]
+    assert data["data"]["fields"]["TITLE"]["type"] == "text"
+    assert data["data"]["fields"]["OWNER"]["label"] == "Owner"
+
+
+def test_schema_omits_fields_key_when_none_configured(runner: CliRunner):
+    result = _invoke(runner, ["schema"])  # default config has no fields
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert "fields" not in data["data"]
+
+
+def test_schema_pretty_shows_fields(runner: CliRunner):
+    from sbm_cli.config import FieldDef
+    config = _make_app_config()
+    config.fields = {
+        "TITLE": FieldDef(dbname="TITLE", type="text", label="Title"),
+    }
+    result = _invoke(runner, ["--pretty", "schema"], config=config)
+    assert result.exit_code == 0
+    assert "TITLE" in result.output
+    assert "text" in result.output
+
+
+# ---------------------------------------------------------------------------
+# configure field discovery
+# ---------------------------------------------------------------------------
+
+def test_configure_with_field_discovery_stores_fields(runner: CliRunner):
+    user_input = (
+        "https://sbm.test\n"   # host
+        "testuser\n"            # username
+        "testpass\n"            # password
+        "1000\n"                # table_id
+        "0\n"                   # report_id
+        "n\n"                   # verify_ssl (No)
+        "02440942\n"            # sample ticket ID
+    )
+
+    saved_configs = []
+
+    def capture_save(config, path=None):
+        saved_configs.append(config)
+
+    with patch("sbm_cli.cli.save_config", side_effect=capture_save):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            MockClient.return_value.get_field_definitions.return_value = [
+                {"dbname": "OWNER", "type": "relational", "label": "Owner"},
+                {"dbname": "TITLE", "type": "text", "label": "TITLE"},
+            ]
+            result = runner.invoke(
+                main,
+                ["configure"],
+                input=user_input,
+                catch_exceptions=False,
+            )
+
+    assert result.exit_code == 0
+    assert len(saved_configs) == 2  # once before fields, once after
+    final_config = saved_configs[-1]
+    assert "TITLE" in final_config.fields
+    assert final_config.fields["TITLE"].type == "text"
+    assert "OWNER" in final_config.fields
+    assert final_config.fields["OWNER"].type == "relational"
+
+
+def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
+    user_input = (
+        "https://sbm.test\n"
+        "testuser\n"
+        "testpass\n"
+        "1000\n"
+        "0\n"
+        "n\n"
+        "\n"  # blank → skip field discovery
+    )
+
+    saved_configs = []
+
+    def capture_save(config, path=None):
+        saved_configs.append(config)
+
+    with patch("sbm_cli.cli.save_config", side_effect=capture_save):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(
+                main,
+                ["configure"],
+                input=user_input,
+                catch_exceptions=False,
+            )
+
+    assert result.exit_code == 0
+    # Only one save: field discovery was skipped
+    assert len(saved_configs) == 1
+    assert saved_configs[0].fields == {}
+    # get_field_definitions should never have been called
+    MockClient.return_value.get_field_definitions.assert_not_called()

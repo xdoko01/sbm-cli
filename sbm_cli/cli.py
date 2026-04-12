@@ -78,6 +78,12 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None, quiet: bool)
         ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet)
         return
 
+    # When a subcommand is invoked with --help, skip config loading so that
+    # help text is always available even without a config file.
+    if "--help" in sys.argv:
+        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet)
+        return
+
     try:
         config = load_config(config_file)
     except ConfigError as exc:

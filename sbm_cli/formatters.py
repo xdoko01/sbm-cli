@@ -25,7 +25,6 @@ def _field_val(item: dict, dbname: str) -> str:
 
 def format_ticket_list(items: list[dict]) -> str:
     c = _console()
-    assert isinstance(c.file, StringIO)
     table = Table(box=box.SIMPLE_HEAD, show_edge=False)
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title")
@@ -56,7 +55,7 @@ def format_ticket(item: dict) -> str:
         val = fdata.get("value")
         if isinstance(val, dict):
             val = val.get("name", str(val.get("id", "")))
-        lines.append(f"  {dbname}: {val}")
+        lines.append(f"  {dbname}: {val if val is not None else ''}")
     return "\n".join(lines)
 
 
@@ -84,7 +83,6 @@ def format_teams(teams: dict) -> str:
     if not teams:
         return "No teams configured. Add [teams] section to ~/.sbm-cli/config.toml"
     c = _console()
-    assert isinstance(c.file, StringIO)
     table = Table(box=box.SIMPLE_HEAD, show_edge=False)
     table.add_column("Slug", style="cyan")
     table.add_column("Name")
@@ -97,7 +95,6 @@ def format_teams(teams: dict) -> str:
 
 def format_field_values(items: list[dict]) -> str:
     c = _console()
-    assert isinstance(c.file, StringIO)
     table = Table(box=box.SIMPLE_HEAD, show_edge=False)
     table.add_column("ID", style="cyan")
     table.add_column("Name")

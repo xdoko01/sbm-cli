@@ -29,10 +29,10 @@ class SBMClient:
 
     def check_auth(self) -> None:
         """Validate credentials. Raises PermissionError on 401."""
-        url = f"{self.host}/jsonapi/GetItem/0/0"
-        resp = self._session.post(url, json={}, timeout=10)
-        if resp.status_code == 401:
-            raise PermissionError("Authentication failed (HTTP 401)")
+        try:
+            self._post(f"{self.host}/jsonapi/GetItem/0/0", {})
+        except SBMError:
+            pass  # API-level error (e.g. item not found) is fine — credentials accepted
 
     def get_item(self, table_id: int, item_id: int,
                  fields: list[str] | None = None) -> dict:
@@ -129,7 +129,7 @@ class SBMClient:
                 if numeric_id is None:
                     return None
                 return {"id": numeric_id, "name": str(name) if name else ""}
-            except (ValueError, SBMError, requests.HTTPError):
+            except (ValueError, SBMError, requests.RequestException):
                 return None
 
         with ThreadPoolExecutor(max_workers=10) as executor:

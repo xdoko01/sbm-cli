@@ -37,4 +37,4 @@ def sample_config():
 
 @pytest.fixture
 def mock_session(mocker):
-    return mocker.patch("requests.Session")
+    return mocker.patch("sbm_cli.client.requests.Session")

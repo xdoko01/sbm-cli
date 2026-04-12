@@ -50,7 +50,7 @@ def _invoke(runner: CliRunner, args: list[str], config: Config | None = None) ->
 def test_schema_outputs_json(runner: CliRunner):
     result = _invoke(runner, ["schema"])
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
     assert data["command"] == "schema"
     assert "assign" in data["data"]["transitions"]
@@ -71,7 +71,7 @@ def test_schema_pretty(runner: CliRunner):
 def test_teams_outputs_json(runner: CliRunner):
     result = _invoke(runner, ["teams"])
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
     assert "market-finance" in data["data"]
     assert data["data"]["market-finance"]["id"] == 155
@@ -92,7 +92,7 @@ def test_missing_config_returns_config_error(runner: CliRunner):
     with patch("sbm_cli.cli.load_config", side_effect=ConfigError("not found")):
         result = runner.invoke(main, ["schema"], catch_exceptions=False)
     assert result.exit_code == 2
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["type"] == "config_error"
 
@@ -111,7 +111,7 @@ def test_list_returns_json(runner: CliRunner):
             MockClient.return_value.list_items_by_report.return_value = mock_items
             result = runner.invoke(main, ["list"], catch_exceptions=False)
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
     assert data["command"] == "list"
     assert len(data["data"]) == 1
@@ -152,7 +152,7 @@ def test_list_api_error(runner: CliRunner):
             MockClient.return_value.list_items_by_report.side_effect = SBMError("forbidden")
             result = runner.invoke(main, ["list"], catch_exceptions=False)
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["type"] == "api_error"
 
@@ -163,7 +163,7 @@ def test_list_auth_error(runner: CliRunner):
             MockClient.return_value.list_items_by_report.side_effect = PermissionError("401")
             result = runner.invoke(main, ["list"], catch_exceptions=False)
     assert result.exit_code == 2
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["error"]["type"] == "auth_error"
 
 
@@ -182,7 +182,7 @@ def test_get_returns_ticket(runner: CliRunner):
             MockClient.return_value.get_item_by_display_id.return_value = mock_data
             result = runner.invoke(main, ["get", "02440942"], catch_exceptions=False)
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
     assert data["command"] == "get"
     assert data["data"]["id"]["itemIdPrefixed"] == "02440942"
@@ -194,7 +194,7 @@ def test_get_not_found(runner: CliRunner):
             MockClient.return_value.get_item_by_display_id.side_effect = ValueError("No item found")
             result = runner.invoke(main, ["get", "9999999"], catch_exceptions=False)
     assert result.exit_code == 1
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert "No item found" in data["error"]["message"]
 
@@ -205,7 +205,7 @@ def test_get_auth_error(runner: CliRunner):
             MockClient.return_value.get_item_by_display_id.side_effect = PermissionError("401")
             result = runner.invoke(main, ["get", "02440942"], catch_exceptions=False)
     assert result.exit_code == 2
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["error"]["type"] == "auth_error"
 
 
@@ -236,7 +236,7 @@ def test_transition_assign_success(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
     assert data["command"] == "transition"
     # Verify start_transition was called with transition id=155
@@ -257,7 +257,7 @@ def test_transition_missing_required_field(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert result.exit_code == 3
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["type"] == "validation_error"
     assert "3RD_LEVEL_SPECIALIST" in data["error"]["message"]
@@ -271,7 +271,7 @@ def test_transition_unknown_name(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert result.exit_code == 2
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["error"]["type"] == "config_error"
 
 
@@ -331,7 +331,7 @@ def test_transition_close_pre_transition_failure_is_ignored(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["ok"] is True
 
 
@@ -363,5 +363,5 @@ def test_transition_run_requires_id_flag(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert result.exit_code == 3
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["error"]["type"] == "validation_error"

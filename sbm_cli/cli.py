@@ -328,6 +328,7 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
         try:
             data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id)
             item_id: int = data["item"]["id"]["id"]
+            ctx.status(f"Starting transition id={transition_id}...")
             lock_id = ctx.client.start_transition(ctx.config.table_id, item_id,
                                                   transition_id, break_lock=True)
             result = ctx.client.update_item(
@@ -370,9 +371,11 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
 
         # Execute optional pre-transition (e.g. "Start Solving" before "Resolved")
         if t.pre_transition_id is not None:
+            ctx.status(f"Running pre-transition id={t.pre_transition_id}...")
             _run_pre_transition(ctx, ctx.config.table_id, item_id,
                                 t.pre_transition_id, t.pre_transition_optional)
 
+        ctx.status(f"Running transition '{name}' (id={t.id})...")
         lock_id = ctx.client.start_transition(ctx.config.table_id, item_id, t.id, break_lock=True)
         result = ctx.client.update_item(
             ctx.config.table_id, item_id,

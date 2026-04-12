@@ -392,3 +392,37 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
         click.echo(f"Transition '{name}' completed on {ticket_id}")
     else:
         ctx.output("transition", result)
+
+
+# ---------------------------------------------------------------------------
+# field-values
+# ---------------------------------------------------------------------------
+
+@main.command("field-values")
+@click.argument("field_name")
+@click.option("--table", "table_id", required=True, type=int,
+              help="Table ID for the relational field (find in 'sbm get' field metadata as relTableId)")
+@click.option("--max-probe", default=500, type=int, show_default=True,
+              help="Max item IDs to probe")
+@pass_ctx
+def field_values(ctx: AppContext, field_name: str, table_id: int, max_probe: int) -> None:
+    """Discover valid values for a relational field.
+
+    Probes the field's source table by ID range using 10 concurrent requests.
+    Find the table ID in 'sbm get <ticket-id>' output under relTableId.
+
+    Example: sbm field-values ROOT_CAUSE --table 9999
+    """
+    items: list = []
+    ctx.status(f"Probing table {table_id} (up to {max_probe} items)...")
+    try:
+        items = ctx.client.probe_table(table_id, max_probe=max_probe)
+    except PermissionError as exc:
+        ctx.error("field-values", "auth_error", str(exc), exit_code=2)
+    except SBMError as exc:
+        ctx.error("field-values", "api_error", str(exc), exit_code=1)
+
+    if ctx.pretty:
+        click.echo(formatters.format_field_values(items))
+    else:
+        ctx.output("field-values", {"field": field_name, "table_id": table_id, "values": items})

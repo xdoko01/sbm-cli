@@ -365,3 +365,41 @@ def test_transition_run_requires_id_flag(runner: CliRunner):
     assert result.exit_code == 3
     data = json.loads(result.stdout)
     assert data["error"]["type"] == "validation_error"
+
+
+# ---------------------------------------------------------------------------
+# field-values
+# ---------------------------------------------------------------------------
+
+def test_field_values_returns_json(runner: CliRunner):
+    probe_results = [{"id": 1701, "name": "Other cause"}, {"id": 1700, "name": "User side issue"}]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.probe_table.return_value = probe_results
+            result = runner.invoke(
+                main,
+                ["field-values", "ROOT_CAUSE", "--table", "9999"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+    assert data["command"] == "field-values"
+    assert data["data"]["field"] == "ROOT_CAUSE"
+    assert data["data"]["table_id"] == 9999
+    assert len(data["data"]["values"]) == 2
+
+
+def test_field_values_pretty(runner: CliRunner):
+    probe_results = [{"id": 1701, "name": "Other cause"}]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.probe_table.return_value = probe_results
+            result = runner.invoke(
+                main,
+                ["--pretty", "field-values", "ROOT_CAUSE", "--table", "9999"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    assert "Other cause" in result.output
+    assert "1701" in result.output

@@ -5,6 +5,7 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
 from sbm_cli.cli import main
 from sbm_cli.config import Config, TransitionConfig, TeamConfig
+from sbm_cli.client import SBMError
 
 
 # ---------------------------------------------------------------------------
@@ -94,3 +95,86 @@ def test_missing_config_returns_config_error(runner: CliRunner):
     data = json.loads(result.output)
     assert data["ok"] is False
     assert data["error"]["type"] == "config_error"
+
+
+# ---------------------------------------------------------------------------
+# list
+# ---------------------------------------------------------------------------
+
+def test_list_returns_json(runner: CliRunner):
+    mock_items = [
+        {"id": {"id": 1, "itemIdPrefixed": "0001"},
+         "fields": {"TITLE": {"value": "Ticket 1"}, "STATE": {"value": "Open"}}}
+    ]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = mock_items
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["ok"] is True
+    assert data["command"] == "list"
+    assert len(data["data"]) == 1
+
+
+def test_list_uses_default_report(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list"], catch_exceptions=False)
+            # Just verify it was called with report_id=2208
+            call_args = MockClient.return_value.list_items_by_report.call_args
+            assert call_args[0][0] == 2208
+
+
+def test_list_with_filter(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_filter.return_value = []
+            runner.invoke(main, ["list", "--filter", "36"], catch_exceptions=False)
+            MockClient.return_value.list_items_by_filter.assert_called_once()
+            call_args = MockClient.return_value.list_items_by_filter.call_args
+            assert call_args[0][0] == "36"
+
+
+def test_list_api_error(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.side_effect = SBMError("forbidden")
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "api_error"
+
+
+# ---------------------------------------------------------------------------
+# get
+# ---------------------------------------------------------------------------
+
+def test_get_returns_ticket(runner: CliRunner):
+    mock_data = {
+        "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"},
+                 "fields": {"TITLE": {"value": "Test"}}},
+        "result": {"type": "OK"},
+    }
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_item_by_display_id.return_value = mock_data
+            result = runner.invoke(main, ["get", "02440942"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["ok"] is True
+    assert data["command"] == "get"
+    assert data["data"]["id"]["itemIdPrefixed"] == "02440942"
+
+
+def test_get_not_found(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_item_by_display_id.side_effect = ValueError("No item found")
+            result = runner.invoke(main, ["get", "9999999"], catch_exceptions=False)
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert "No item found" in data["error"]["message"]

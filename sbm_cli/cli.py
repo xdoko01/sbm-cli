@@ -180,3 +180,74 @@ def teams(ctx: AppContext) -> None:
         click.echo(formatters.format_teams(teams_data))
     else:
         ctx.output("teams", teams_data)
+
+
+# ---------------------------------------------------------------------------
+# list
+# ---------------------------------------------------------------------------
+
+_DEFAULT_LIST_FIELDS = ["TITLE", "STATE", "OWNER", "SECONDARYOWNER", "URGENCY", "SEVERITY"]
+
+
+@main.command("list")
+@click.option("--report", "report_id", default=None, type=int,
+              help="Report ID (overrides default)")
+@click.option("--filter", "filter_id", default=None,
+              help="Filter ID or name")
+@click.option("--fields", default=None,
+              help="Comma-separated field dbnames (default: TITLE,STATE,OWNER,SECONDARYOWNER,URGENCY,SEVERITY)")
+@pass_ctx
+def list_tickets(ctx: AppContext, report_id: int | None,
+                 filter_id: str | None, fields: str | None) -> None:
+    """List tickets from a report or filter."""
+    field_list = fields.split(",") if fields else _DEFAULT_LIST_FIELDS
+
+    try:
+        if filter_id is not None:
+            items = ctx.client.list_items_by_filter(filter_id, fields=field_list)
+        else:
+            rid = report_id or ctx.config.report_id
+            if not rid:
+                ctx.error("list", "config_error",
+                          "No report_id configured. Use --report or set defaults.report_id in config.",
+                          exit_code=2)
+            items = ctx.client.list_items_by_report(rid, fields=field_list)
+    except PermissionError as exc:
+        ctx.error("list", "auth_error", str(exc), exit_code=2)
+    except SBMError as exc:
+        ctx.error("list", "api_error", str(exc), exit_code=1)
+
+    if ctx.pretty:
+        click.echo(formatters.format_ticket_list(items))
+    else:
+        ctx.output("list", items)
+
+
+# ---------------------------------------------------------------------------
+# get
+# ---------------------------------------------------------------------------
+
+@main.command()
+@click.argument("ticket_id")
+@click.option("--fields", default=None,
+              help="Comma-separated field dbnames (default: all)")
+@pass_ctx
+def get(ctx: AppContext, ticket_id: str, fields: str | None) -> None:
+    """Get a ticket by display ID (e.g. 02440942)."""
+    field_list = fields.split(",") if fields else None
+
+    try:
+        data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id,
+                                                   fields=field_list)
+    except PermissionError as exc:
+        ctx.error("get", "auth_error", str(exc), exit_code=2)
+    except ValueError as exc:
+        ctx.error("get", "api_error", str(exc), exit_code=1)
+    except SBMError as exc:
+        ctx.error("get", "api_error", str(exc), field=exc.field, exit_code=1)
+
+    item = data.get("item", {})
+    if ctx.pretty:
+        click.echo(formatters.format_ticket(item))
+    else:
+        ctx.output("get", item)

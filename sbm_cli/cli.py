@@ -122,7 +122,13 @@ def configure(ctx: click.Context) -> None:
         click.echo(f"Connection failed: {exc}", err=True)
         sys.exit(2)
     except Exception as exc:
-        click.echo(f"Connection test failed: {exc}", err=True)
+        import requests as _req
+        if isinstance(exc, _req.exceptions.ConnectionError):
+            click.echo(f"Connection failed: could not reach {host} — check the URL and network", err=True)
+        elif isinstance(exc, _req.exceptions.Timeout):
+            click.echo(f"Connection failed: request timed out connecting to {host}", err=True)
+        else:
+            click.echo(f"Connection test failed: {exc}", err=True)
         sys.exit(2)
 
 

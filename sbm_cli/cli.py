@@ -202,6 +202,7 @@ def list_tickets(ctx: AppContext, report_id: int | None,
     """List tickets from a report or filter."""
     field_list = fields.split(",") if fields else _DEFAULT_LIST_FIELDS
 
+    items: list = []
     try:
         if filter_id is not None:
             items = ctx.client.list_items_by_filter(filter_id, fields=field_list)
@@ -236,6 +237,7 @@ def get(ctx: AppContext, ticket_id: str, fields: str | None) -> None:
     """Get a ticket by display ID (e.g. 02440942)."""
     field_list = fields.split(",") if fields else None
 
+    data: dict = {}
     try:
         data = ctx.client.get_item_by_display_id(ticket_id, ctx.config.table_id,
                                                    fields=field_list)

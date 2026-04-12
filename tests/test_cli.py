@@ -127,6 +127,15 @@ def test_list_uses_default_report(runner: CliRunner):
             assert call_args[0][0] == 2208
 
 
+def test_list_with_explicit_report(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list", "--report", "9999"], catch_exceptions=False)
+            call_args = MockClient.return_value.list_items_by_report.call_args
+            assert call_args[0][0] == 9999
+
+
 def test_list_with_filter(runner: CliRunner):
     with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
         with patch("sbm_cli.cli.SBMClient") as MockClient:
@@ -146,6 +155,16 @@ def test_list_api_error(runner: CliRunner):
     data = json.loads(result.output)
     assert data["ok"] is False
     assert data["error"]["type"] == "api_error"
+
+
+def test_list_auth_error(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.side_effect = PermissionError("401")
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.output)
+    assert data["error"]["type"] == "auth_error"
 
 
 # ---------------------------------------------------------------------------
@@ -178,3 +197,13 @@ def test_get_not_found(runner: CliRunner):
     data = json.loads(result.output)
     assert data["ok"] is False
     assert "No item found" in data["error"]["message"]
+
+
+def test_get_auth_error(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_item_by_display_id.side_effect = PermissionError("401")
+            result = runner.invoke(main, ["get", "02440942"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.output)
+    assert data["error"]["type"] == "auth_error"

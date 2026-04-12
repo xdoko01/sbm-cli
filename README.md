@@ -98,6 +98,21 @@ uv run pytest
 uv run pytest -m integration  # requires live SBM connection
 ```
 
+## Planned features
+
+- **`[users]` config section** — map login names / display names to numeric user IDs so
+  transitions accept `--field OWNER=jaroslav.burget` instead of `--field OWNER=15399`
+- **Dynamic columns in `--pretty list`** — derive table columns from whatever fields
+  were requested instead of hardcoded TITLE/STATE/OWNER/TEAM columns
+- **`sbm fields` command** — list all available field definitions for a table (dbnames,
+  types, labels) by querying the SBM API
+- **`--indent` flag** — output formatted JSON with indentation instead of a compact
+  single line, for human readability
+- **Field discovery in `sbm configure`** — prompt for a sample ticket ID during setup,
+  fetch all its fields, store the schema in `~/.sbm-cli/config.toml` under `[fields]`,
+  and expose via `sbm schema` so AI assistants can discover available fields without
+  querying live tickets
+
 ## License
 
 MIT

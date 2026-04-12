@@ -65,18 +65,27 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     for name, raw in data.get("transitions", {}).items():
         if not isinstance(raw, dict):
             continue
-        transitions[name] = TransitionConfig(
-            id=raw["id"],
-            fields=raw.get("fields", []),
-            field_types=raw.get("field_types", {}),
-            pre_transition_id=raw.get("pre_transition_id"),
-            pre_transition_optional=raw.get("pre_transition_optional", False),
-        )
+        try:
+            transitions[name] = TransitionConfig(
+                id=raw["id"],
+                fields=raw.get("fields", []),
+                field_types=raw.get("field_types", {}),
+                pre_transition_id=raw.get("pre_transition_id"),
+                pre_transition_optional=raw.get("pre_transition_optional", False),
+            )
+        except KeyError as exc:
+            raise ConfigError(
+                f"Transition '{name}' missing required key: {exc}"
+            ) from exc
 
     teams: dict[str, TeamConfig] = {}
     for slug, raw in data.get("teams", {}).items():
-        if isinstance(raw, dict):
+        if not isinstance(raw, dict):
+            continue
+        try:
             teams[slug] = TeamConfig(id=raw["id"], name=raw.get("name", slug))
+        except KeyError as exc:
+            raise ConfigError(f"Team '{slug}' missing required key: {exc}") from exc
 
     return Config(
         host=conn["host"],
@@ -90,43 +99,46 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     )
 
 
+def _toml_str(s: str) -> str:
+    """Escape a string value for TOML double-quoted strings."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    transition_lines: list[str] = []
-    field_type_sections: list[str] = []
-    for name, t in config.transitions.items():
-        fields_str = ", ".join(f'"{f}"' for f in t.fields)
-        line = f'{name} = {{ id = {t.id}, fields = [{fields_str}]'
-        if t.pre_transition_id is not None:
-            line += f", pre_transition_id = {t.pre_transition_id}"
-            line += f", pre_transition_optional = {'true' if t.pre_transition_optional else 'false'}"
-        line += " }"
-        transition_lines.append(line)
-        if t.field_types:
-            field_type_sections.append(f"\n[transitions.{name}.field_types]")
-            for fname, ftype in t.field_types.items():
-                field_type_sections.append(f'{fname} = "{ftype}"')
-
-    team_lines = [
-        f'{slug} = {{ id = {t.id}, name = "{t.name}" }}'
-        for slug, t in config.teams.items()
+    lines: list[str] = [
+        "[connection]",
+        f'host       = "{_toml_str(config.host)}"',
+        f'username   = "{_toml_str(config.username)}"',
+        f'password   = "{_toml_str(config.password)}"',
+        f"verify_ssl = {'true' if config.verify_ssl else 'false'}",
+        "",
+        "[defaults]",
+        f"table_id  = {config.table_id}",
+        f"report_id = {config.report_id}",
     ]
 
-    content = (
-        "[connection]\n"
-        f'host       = "{config.host}"\n'
-        f'username   = "{config.username}"\n'
-        f'password   = "{config.password}"\n'
-        f"verify_ssl = {'true' if config.verify_ssl else 'false'}\n"
-        "\n[defaults]\n"
-        f"table_id  = {config.table_id}\n"
-        f"report_id = {config.report_id}\n"
-        "\n[transitions]\n"
-        + "\n".join(transition_lines)
-        + "\n".join(field_type_sections)
-        + "\n\n[teams]\n"
-        + "\n".join(team_lines)
-        + "\n"
-    )
-    path.write_text(content, encoding="utf-8")
+    for name, t in config.transitions.items():
+        lines.append("")
+        lines.append(f"[transitions.{name}]")
+        lines.append(f"id = {t.id}")
+        fields_str = ", ".join(f'"{f}"' for f in t.fields)
+        lines.append(f"fields = [{fields_str}]")
+        if t.pre_transition_id is not None:
+            lines.append(f"pre_transition_id = {t.pre_transition_id}")
+            lines.append(f"pre_transition_optional = {'true' if t.pre_transition_optional else 'false'}")
+        if t.field_types:
+            lines.append("")
+            lines.append(f"[transitions.{name}.field_types]")
+            for fname, ftype in t.field_types.items():
+                lines.append(f'{fname} = "{_toml_str(ftype)}"')
+
+    if config.teams:
+        lines.append("")
+        lines.append("[teams]")
+        for slug, team in config.teams.items():
+            lines.append(f'{slug} = {{ id = {team.id}, name = "{_toml_str(team.name)}" }}')
+
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")

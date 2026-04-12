@@ -87,11 +87,25 @@ def test_save_and_reload_roundtrip(tmp_path):
         verify_ssl=True,
         table_id=1000,
         report_id=2208,
-        transitions={"assign": TransitionConfig(id=155, fields=["OWNER"])},
+        transitions={
+            "assign": TransitionConfig(id=155, fields=["OWNER"]),
+            "close": TransitionConfig(
+                id=19, fields=["RESOLUTION", "ROOT_CAUSE"],
+                pre_transition_id=148, pre_transition_optional=True,
+            ),
+            "transfer": TransitionConfig(
+                id=140, fields=["L3_SPECIALIST_GROUP"],
+                field_types={"L3_SPECIALIST_GROUP": "list"},
+            ),
+        },
         teams={"test-team": TeamConfig(id=99, name="Test Team")},
     )
     save_config(original, cfg_file)
     reloaded = load_config(cfg_file)
     assert reloaded.host == original.host
+    assert reloaded.verify_ssl == original.verify_ssl
     assert reloaded.transitions["assign"].id == 155
+    assert reloaded.transitions["close"].pre_transition_id == 148
+    assert reloaded.transitions["close"].pre_transition_optional is True
+    assert reloaded.transitions["transfer"].field_types == {"L3_SPECIALIST_GROUP": "list"}
     assert reloaded.teams["test-team"].name == "Test Team"

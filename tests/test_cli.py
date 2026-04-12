@@ -32,7 +32,7 @@ def _make_app_config() -> Config:
                 field_types={"L3_SPECIALIST_GROUP": "list"},
             ),
         },
-        teams={"market-finance": TeamConfig(id=155, name="L3 SD Market Finance")},
+        teams={"my-team": TeamConfig(id=155, name="L3 Example Team")},
     )
 
 
@@ -73,14 +73,14 @@ def test_teams_outputs_json(runner: CliRunner):
     assert result.exit_code == 0
     data = json.loads(result.stdout)
     assert data["ok"] is True
-    assert "market-finance" in data["data"]
-    assert data["data"]["market-finance"]["id"] == 155
+    assert "my-team" in data["data"]
+    assert data["data"]["my-team"]["id"] == 155
 
 
 def test_teams_pretty(runner: CliRunner):
     result = _invoke(runner, ["--pretty", "teams"])
     assert result.exit_code == 0
-    assert "market-finance" in result.output
+    assert "my-team" in result.output
 
 
 # ---------------------------------------------------------------------------

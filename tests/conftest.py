@@ -30,7 +30,7 @@ def sample_config():
             ),
         },
         teams={
-            "market-finance": TeamConfig(id=155, name="L3 SD Market Finance"),
+            "my-team": TeamConfig(id=155, name="L3 Example Team"),
         },
     )
 

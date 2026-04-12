@@ -62,7 +62,7 @@ Exit codes: 0=success, 1=API error, 2=config/auth error, 3=validation error.
 ## Known quirks (handled automatically by the CLI)
 
 - `verify_ssl = false` is required for internal self-signed certificates
-- Username must be bare (e.g. `otakar`, not `DOMAIN\otakar`)
+- Username must be bare (e.g. `alice`, not `DOMAIN\alice`)
 - `pagesize` for filter queries must be a URL param — the CLI handles this
 - `assign` and `transfer` transitions require a `startTransition` lock — the CLI handles this
 - `close` is a two-step transition (Start Solving → Resolved) — handled automatically

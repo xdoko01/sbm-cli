@@ -111,6 +111,8 @@ def configure(ctx: click.Context) -> None:
     table_id = click.prompt("Default table ID", default=1000, type=int)
     report_id = click.prompt("Default report ID", default=0, type=int)
     verify_ssl = click.confirm("Verify SSL certificate?", default=False)
+    if not verify_ssl:
+        click.echo("Warning: SSL verification disabled — only use for trusted internal hosts.", err=True)
 
     config = Config(
         host=host, username=username, password=password,

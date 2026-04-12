@@ -7,8 +7,8 @@ def _make_item(display_id: str, title: str, state: str = "Open") -> dict:
         "fields": {
             "TITLE": {"value": title},
             "STATE": {"value": state},
-            "OWNER": {"value": {"id": 1, "name": "Burget, Jaroslav"}},
-            "SECONDARYOWNER": {"value": {"id": -155, "name": "L3 SD Market Finance"}},
+            "OWNER": {"value": {"id": 1, "name": "Smith, Alice"}},
+            "SECONDARYOWNER": {"value": {"id": -155, "name": "L3 Example Team"}},
         },
     }
 
@@ -48,10 +48,10 @@ def test_format_schema_contains_transitions():
 
 
 def test_format_teams_contains_slug_and_name():
-    teams = {"market-finance": {"id": 155, "name": "L3 SD Market Finance"}}
+    teams = {"my-team": {"id": 155, "name": "L3 Example Team"}}
     output = formatters.format_teams(teams)
-    assert "market-finance" in output
-    assert "L3 SD Market Finance" in output
+    assert "my-team" in output
+    assert "L3 Example Team" in output
     assert "155" in output
 
 

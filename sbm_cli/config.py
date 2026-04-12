@@ -1,6 +1,7 @@
 """Config file loading, saving, and dataclasses for sbm-cli."""
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -99,6 +100,14 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     )
 
 
+_BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+
+
+def _validate_toml_key(key: str, context: str) -> None:
+    if not _BARE_KEY_RE.match(key):
+        raise ConfigError(f"Invalid key {key!r} in {context}: only A-Z, a-z, 0-9, _ and - allowed")
+
+
 def _toml_str(s: str) -> str:
     """Escape a string value for TOML double-quoted strings."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -120,6 +129,7 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
     ]
 
     for name, t in config.transitions.items():
+        _validate_toml_key(name, "transitions")
         lines.append("")
         lines.append(f"[transitions.{name}]")
         lines.append(f"id = {t.id}")
@@ -127,11 +137,13 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         lines.append(f"fields = [{fields_str}]")
         if t.pre_transition_id is not None:
             lines.append(f"pre_transition_id = {t.pre_transition_id}")
-            lines.append(f"pre_transition_optional = {'true' if t.pre_transition_optional else 'false'}")
+        if t.pre_transition_optional:
+            lines.append(f"pre_transition_optional = true")
         if t.field_types:
             lines.append("")
             lines.append(f"[transitions.{name}.field_types]")
             for fname, ftype in t.field_types.items():
+                _validate_toml_key(fname, f"transitions.{name}.field_types")
                 lines.append(f'{fname} = "{_toml_str(ftype)}"')
 
     if config.teams:

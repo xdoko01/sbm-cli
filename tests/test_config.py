@@ -4,6 +4,7 @@ from pathlib import Path
 from sbm_cli.config import (
     Config, TransitionConfig, TeamConfig,
     ConfigError, load_config, save_config, DEFAULT_CONFIG_PATH,
+    _validate_toml_key,
 )
 
 VALID_TOML = """\
@@ -109,3 +110,70 @@ def test_save_and_reload_roundtrip(tmp_path):
     assert reloaded.transitions["close"].pre_transition_optional is True
     assert reloaded.transitions["transfer"].field_types == {"L3_SPECIALIST_GROUP": "list"}
     assert reloaded.teams["test-team"].name == "Test Team"
+
+
+def test_save_and_reload_special_chars(tmp_path):
+    cfg_file = tmp_path / "config.toml"
+    cfg = Config(
+        host="https://sbm.example.com",
+        username="domain\\user",
+        password='p@ss"word',
+        verify_ssl=True,
+        table_id=1000,
+        report_id=0,
+    )
+    save_config(cfg, cfg_file)
+    reloaded = load_config(cfg_file)
+    assert reloaded.username == "domain\\user"
+    assert reloaded.password == 'p@ss"word'
+
+
+def test_save_config_invalid_transition_name_raises(tmp_path):
+    cfg_file = tmp_path / "config.toml"
+    cfg = Config(
+        host="https://sbm.example.com",
+        username="user",
+        password="pass",
+        verify_ssl=True,
+        table_id=1000,
+        report_id=0,
+        transitions={"bad.name": TransitionConfig(id=1)},
+    )
+    with pytest.raises(ConfigError, match="Invalid key"):
+        save_config(cfg, cfg_file)
+
+
+def test_save_config_invalid_field_type_key_raises(tmp_path):
+    cfg_file = tmp_path / "config.toml"
+    cfg = Config(
+        host="https://sbm.example.com",
+        username="user",
+        password="pass",
+        verify_ssl=True,
+        table_id=1000,
+        report_id=0,
+        transitions={
+            "assign": TransitionConfig(id=1, field_types={"bad key": "list"}),
+        },
+    )
+    with pytest.raises(ConfigError, match="Invalid key"):
+        save_config(cfg, cfg_file)
+
+
+def test_pre_transition_optional_without_id_roundtrip(tmp_path):
+    cfg_file = tmp_path / "config.toml"
+    cfg = Config(
+        host="https://sbm.example.com",
+        username="user",
+        password="pass",
+        verify_ssl=True,
+        table_id=1000,
+        report_id=0,
+        transitions={
+            "mytr": TransitionConfig(id=5, pre_transition_optional=True),
+        },
+    )
+    save_config(cfg, cfg_file)
+    reloaded = load_config(cfg_file)
+    assert reloaded.transitions["mytr"].pre_transition_optional is True
+    assert reloaded.transitions["mytr"].pre_transition_id is None

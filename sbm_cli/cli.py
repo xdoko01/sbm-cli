@@ -232,7 +232,7 @@ def list_tickets(ctx: AppContext, report_id: int | None,
         ctx.error("list", "api_error", str(exc), exit_code=1)
 
     if ctx.pretty:
-        click.echo(formatters.format_ticket_list(items))
+        click.echo(formatters.format_ticket_list(items, columns=field_list))
     else:
         ctx.output("list", items)
 

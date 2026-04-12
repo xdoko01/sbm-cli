@@ -65,3 +65,35 @@ def test_format_field_values_contains_id_and_name():
     output = formatters.format_field_values(items)
     assert "1701" in output
     assert "Other cause" in output
+
+
+def test_format_ticket_list_dynamic_columns():
+    items = [
+        {
+            "id": {"id": 1, "itemIdPrefixed": "00001"},
+            "fields": {
+                "TITLE": {"value": "Bug report"},
+                "CUSTOM_SEVERITY": {"value": "Critical"},
+            }
+        }
+    ]
+    output = formatters.format_ticket_list(items, columns=["TITLE", "CUSTOM_SEVERITY"])
+    assert "Bug report" in output
+    assert "Critical" in output
+    # Default "Team" column should NOT appear when custom columns are given
+    assert "Team" not in output
+
+
+def test_format_ticket_list_default_columns_unchanged():
+    items = [
+        {
+            "id": {"id": 1, "itemIdPrefixed": "00001"},
+            "fields": {
+                "TITLE": {"value": "Ticket"},
+                "STATE": {"value": "Open"},
+            }
+        }
+    ]
+    output = formatters.format_ticket_list(items)  # no columns arg
+    assert "Ticket" in output
+    assert "Open" in output

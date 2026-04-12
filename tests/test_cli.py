@@ -459,3 +459,26 @@ def test_no_indent_by_default(runner: CliRunner):
     assert result.exit_code == 0
     # compact JSON has no leading spaces
     assert result.stdout.startswith('{"ok"')
+
+
+def test_list_pretty_uses_requested_columns(runner: CliRunner):
+    mock_items = [
+        {
+            "id": {"id": 1, "itemIdPrefixed": "00001"},
+            "fields": {
+                "TITLE": {"value": "My Ticket"},
+                "URGENCY": {"value": "High"},
+            }
+        }
+    ]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = mock_items
+            result = runner.invoke(
+                main,
+                ["--pretty", "list", "--fields", "TITLE,URGENCY"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    assert "My Ticket" in result.output
+    assert "High" in result.output

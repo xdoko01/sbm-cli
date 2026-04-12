@@ -23,24 +23,17 @@ def _field_val(item: dict, dbname: str) -> str:
     return str(val) if val is not None else ""
 
 
-def format_ticket_list(items: list[dict]) -> str:
+def format_ticket_list(items: list[dict], columns: list[str] | None = None) -> str:
+    cols = columns if columns is not None else ["TITLE", "STATE", "OWNER", "SECONDARYOWNER"]
     c = _console()
     table = Table(box=box.SIMPLE_HEAD, show_edge=False)
     table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Title")
-    table.add_column("State", style="yellow")
-    table.add_column("Owner", style="green")
-    table.add_column("Team")
+    for col in cols:
+        table.add_column(col.replace("_", " ").title())
     for item in items:
         iid = item.get("id", {})
         display_id = iid.get("itemIdPrefixed", str(iid.get("id", "")))
-        table.add_row(
-            display_id,
-            _field_val(item, "TITLE"),
-            _field_val(item, "STATE"),
-            _field_val(item, "OWNER"),
-            _field_val(item, "SECONDARYOWNER"),
-        )
+        table.add_row(display_id, *[_field_val(item, col) for col in cols])
     c.print(table)
     return c.file.getvalue()
 

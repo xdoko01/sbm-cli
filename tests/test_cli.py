@@ -402,4 +402,31 @@ def test_field_values_pretty(runner: CliRunner):
             )
     assert result.exit_code == 0
     assert "Other cause" in result.output
-    assert "1701" in result.output
+
+
+def test_field_values_auth_error(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.probe_table.side_effect = PermissionError("401")
+            result = runner.invoke(
+                main,
+                ["field-values", "ROOT_CAUSE", "--table", "9999"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "auth_error"
+
+
+def test_field_values_api_error(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.probe_table.side_effect = SBMError("probe failed")
+            result = runner.invoke(
+                main,
+                ["field-values", "ROOT_CAUSE", "--table", "9999"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "api_error"

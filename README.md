@@ -97,7 +97,7 @@ Exit codes: `0` success · `1` API error · `2` config/auth error · `3` validat
 ## Development
 
 ```bash
-git clone https://github.com/<your-username>/sbm-cli
+git clone https://github.com/xdoko01/sbm-cli
 cd sbm-cli
 uv sync
 uv run sbm configure

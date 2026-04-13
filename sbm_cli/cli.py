@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import click
+import requests
 
 from sbm_cli.client import SBMClient, SBMError
 from sbm_cli.config import (
@@ -162,13 +163,12 @@ def configure_setup(ctx: click.Context) -> None:
         click.echo(f"Connection failed: {exc}", err=True)
         sys.exit(2)
     except Exception as exc:
-        import requests as _req
-        if isinstance(exc, _req.exceptions.ConnectionError):
+        if isinstance(exc, requests.exceptions.ConnectionError):
             click.echo(
                 f"Connection failed: could not reach {host} — check the URL and network",
                 err=True,
             )
-        elif isinstance(exc, _req.exceptions.Timeout):
+        elif isinstance(exc, requests.exceptions.Timeout):
             click.echo(f"Connection failed: request timed out connecting to {host}", err=True)
         else:
             click.echo(f"Connection test failed: {exc}", err=True)
@@ -234,7 +234,12 @@ def configure_transition(name: str) -> None:
     }
 
     pre_id_str = click.prompt("Pre-transition ID (blank to skip)", default="")
-    pre_id = int(pre_id_str.strip()) if pre_id_str.strip() else None
+    pre_id = None
+    if pre_id_str.strip():
+        try:
+            pre_id = int(pre_id_str.strip())
+        except ValueError:
+            click.echo("Pre-transition ID must be an integer — skipping.", err=True)
     pre_optional = False
     if pre_id is not None:
         pre_optional = click.confirm("Pre-transition optional?", default=False)
@@ -246,7 +251,11 @@ def configure_transition(name: str) -> None:
         pre_transition_id=pre_id,
         pre_transition_optional=pre_optional,
     )
-    save_config(config)
+    try:
+        save_config(config)
+    except ConfigError as exc:
+        click.echo(f"Error saving config: {exc}", err=True)
+        sys.exit(2)
     click.echo(f"Transition '{name}' saved to {DEFAULT_CONFIG_PATH}", err=True)
 
 

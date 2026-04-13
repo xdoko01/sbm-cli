@@ -845,6 +845,18 @@ def test_configure_transition_overwrite_confirm_no_aborts(runner: CliRunner):
     mock_save.assert_not_called()
 
 
+def test_configure_transition_missing_config_exits_2(runner: CliRunner):
+    """configure transition exits 2 when config file does not exist."""
+    from sbm_cli.config import ConfigError
+    with patch("sbm_cli.cli.load_config", side_effect=ConfigError("not found")):
+        result = runner.invoke(
+            main,
+            ["configure", "transition", "assign"],
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 2
+
+
 def test_configure_setup_saves_list_fields(runner: CliRunner):
     """configure setup persists list_fields when user provides them."""
     with patch("sbm_cli.cli.save_config") as mock_save:

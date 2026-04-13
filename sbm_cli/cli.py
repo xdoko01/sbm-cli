@@ -103,13 +103,24 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 
 
 # ---------------------------------------------------------------------------
-# configure
+# configure group
 # ---------------------------------------------------------------------------
 
-@main.command()
+@main.group(invoke_without_command=True)
 @click.pass_context
 def configure(ctx: click.Context) -> None:
-    """Interactive setup wizard — writes ~/.sbm-cli/config.toml."""
+    """Interactive setup commands — writes ~/.sbm-cli/config.toml.
+
+    With no subcommand, runs the full setup wizard (same as 'configure setup').
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(configure_setup)
+
+
+@configure.command("setup")
+@click.pass_context
+def configure_setup(ctx: click.Context) -> None:
+    """Full interactive wizard — configures connection, defaults, and list fields."""
     host = click.prompt("SBM host", default="https://sbm.example.com")
     username = click.prompt("Username (bare, no domain prefix)")
     password = click.prompt("Password", hide_input=True)
@@ -117,11 +128,26 @@ def configure(ctx: click.Context) -> None:
     report_id = click.prompt("Default report ID", default=0, type=int)
     verify_ssl = click.confirm("Verify SSL certificate?", default=False)
     if not verify_ssl:
-        click.echo("Warning: SSL verification disabled — only use for trusted internal hosts.", err=True)
+        click.echo(
+            "Warning: SSL verification disabled — only use for trusted internal hosts.",
+            err=True,
+        )
+
+    list_fields_input = click.prompt(
+        "Default list fields (comma-separated, blank to use built-in default "
+        "TITLE,STATE,OWNER,SECONDARYOWNER,URGENCY,SEVERITY)",
+        default="",
+    )
+    list_fields = (
+        [f.strip() for f in list_fields_input.split(",") if f.strip()]
+        if list_fields_input.strip()
+        else []
+    )
 
     config = Config(
         host=host, username=username, password=password,
         verify_ssl=verify_ssl, table_id=table_id, report_id=report_id,
+        list_fields=list_fields,
     )
     save_config(config)
     click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
@@ -138,7 +164,10 @@ def configure(ctx: click.Context) -> None:
     except Exception as exc:
         import requests as _req
         if isinstance(exc, _req.exceptions.ConnectionError):
-            click.echo(f"Connection failed: could not reach {host} — check the URL and network", err=True)
+            click.echo(
+                f"Connection failed: could not reach {host} — check the URL and network",
+                err=True,
+            )
         elif isinstance(exc, _req.exceptions.Timeout):
             click.echo(f"Connection failed: request timed out connecting to {host}", err=True)
         else:
@@ -167,6 +196,58 @@ def configure(ctx: click.Context) -> None:
             click.echo(f"Stored {len(config.fields)} field definitions.", err=True)
         except Exception as exc:
             click.echo(f"Field discovery failed (skipping): {exc}", err=True)
+
+
+@configure.command("transition")
+@click.argument("name")
+def configure_transition(name: str) -> None:
+    """Add or update a named transition in ~/.sbm-cli/config.toml.
+
+    Example: sbm configure transition assign
+    """
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except ConfigError as exc:
+        click.echo(f"Error loading config: {exc}", err=True)
+        click.echo("Run 'sbm configure setup' first to create the config file.", err=True)
+        sys.exit(2)
+
+    if name in config.transitions:
+        if not click.confirm(f"Transition '{name}' already exists. Overwrite?", default=False):
+            click.echo("Aborted.", err=True)
+            return
+
+    transition_id = click.prompt("Transition ID", type=int)
+
+    fields_input = click.prompt(
+        "Required fields (comma-separated, blank for none)", default=""
+    )
+    required_fields = [f.strip() for f in fields_input.split(",") if f.strip()]
+
+    list_fields_input = click.prompt(
+        "Fields that take a list value (comma-separated, blank for none)", default=""
+    )
+    field_types = {
+        f.strip(): "list"
+        for f in list_fields_input.split(",")
+        if f.strip()
+    }
+
+    pre_id_str = click.prompt("Pre-transition ID (blank to skip)", default="")
+    pre_id = int(pre_id_str.strip()) if pre_id_str.strip() else None
+    pre_optional = False
+    if pre_id is not None:
+        pre_optional = click.confirm("Pre-transition optional?", default=False)
+
+    config.transitions[name] = TransitionConfig(
+        id=transition_id,
+        fields=required_fields,
+        field_types=field_types,
+        pre_transition_id=pre_id,
+        pre_transition_optional=pre_optional,
+    )
+    save_config(config)
+    click.echo(f"Transition '{name}' saved to {DEFAULT_CONFIG_PATH}", err=True)
 
 
 # ---------------------------------------------------------------------------

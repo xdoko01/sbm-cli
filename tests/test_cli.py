@@ -643,6 +643,7 @@ def test_configure_with_field_discovery_stores_fields(runner: CliRunner):
         "1000\n"                # table_id
         "0\n"                   # report_id
         "n\n"                   # verify_ssl (No)
+        "\n"                    # list_fields (blank → use default)
         "02440942\n"            # sample ticket ID
     )
 
@@ -750,6 +751,7 @@ def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
         "1000\n"
         "0\n"
         "n\n"
+        "\n"  # list_fields (blank → use default)
         "\n"  # blank → skip field discovery
     )
 
@@ -774,3 +776,102 @@ def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
     assert saved_configs[0].fields == {}
     # get_field_definitions should never have been called
     MockClient.return_value.get_field_definitions.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# configure group — new subcommands (Task 6)
+# ---------------------------------------------------------------------------
+
+def test_configure_transition_adds_named_transition(runner: CliRunner):
+    """configure transition writes a new transition into the loaded config."""
+    initial_cfg = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=2208,
+    )
+    with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
+        with patch("sbm_cli.cli.save_config") as mock_save:
+            result = runner.invoke(
+                main,
+                ["configure", "transition", "assign"],
+                # Inputs: transition_id, required_fields, list_fields, pre_id
+                input="155\nOWNER,3RD_LEVEL_SPECIALIST\n\n\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    saved_cfg = mock_save.call_args[0][0]
+    assert "assign" in saved_cfg.transitions
+    assert saved_cfg.transitions["assign"].id == 155
+    assert saved_cfg.transitions["assign"].fields == ["OWNER", "3RD_LEVEL_SPECIALIST"]
+    assert saved_cfg.transitions["assign"].field_types == {}
+    assert saved_cfg.transitions["assign"].pre_transition_id is None
+
+
+def test_configure_transition_with_pre_transition(runner: CliRunner):
+    """configure transition saves pre_transition_id and pre_transition_optional."""
+    initial_cfg = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+    )
+    with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
+        with patch("sbm_cli.cli.save_config") as mock_save:
+            result = runner.invoke(
+                main,
+                ["configure", "transition", "close"],
+                # transition_id=19, fields=RESOLUTION,ROOT_CAUSE, list_fields=blank,
+                # pre_id=148, pre_optional=y
+                input="19\nRESOLUTION,ROOT_CAUSE\n\n148\ny\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    saved_cfg = mock_save.call_args[0][0]
+    t = saved_cfg.transitions["close"]
+    assert t.id == 19
+    assert t.pre_transition_id == 148
+    assert t.pre_transition_optional is True
+
+
+def test_configure_transition_overwrite_confirm_no_aborts(runner: CliRunner):
+    """Answering N to overwrite prompt leaves config unchanged."""
+    cfg = _make_app_config()  # already has 'assign' transition
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.save_config") as mock_save:
+            result = runner.invoke(
+                main,
+                ["configure", "transition", "assign"],
+                input="N\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    mock_save.assert_not_called()
+
+
+def test_configure_setup_saves_list_fields(runner: CliRunner):
+    """configure setup persists list_fields when user provides them."""
+    with patch("sbm_cli.cli.save_config") as mock_save:
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = PermissionError("401")
+            result = runner.invoke(
+                main,
+                ["configure", "setup"],
+                # host, username, password, table_id, report_id, verify_ssl,
+                # list_fields, sample_ticket
+                input="https://sbm.test\nuser\npass\n1000\n0\nn\nTITLE,FUNCTIONALITY,URGENCY\n\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code in (0, 2)  # 2 because auth fails, but save still happens
+    saved_cfg = mock_save.call_args[0][0]
+    assert saved_cfg.list_fields == ["TITLE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
+    """sbm configure with no subcommand invokes the setup wizard."""
+    with patch("sbm_cli.cli.save_config"):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = PermissionError("401")
+            result = runner.invoke(
+                main,
+                ["configure"],
+                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                catch_exceptions=False,
+            )
+    assert "SBM host" in result.output

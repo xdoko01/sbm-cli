@@ -242,7 +242,11 @@ _DEFAULT_LIST_FIELDS = ["TITLE", "STATE", "OWNER", "SECONDARYOWNER", "URGENCY", 
 def list_tickets(ctx: AppContext, report_id: int | None,
                  filter_id: str | None, fields: str | None) -> None:
     """List tickets from a report or filter."""
-    field_list = fields.split(",") if fields else _DEFAULT_LIST_FIELDS
+    field_list = (
+        fields.split(",") if fields          # explicit --fields always wins
+        else ctx.config.list_fields          # user's configured default
+        or _DEFAULT_LIST_FIELDS              # hardcoded fallback when neither is set
+    )
 
     items: list = []
     try:

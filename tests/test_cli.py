@@ -672,6 +672,47 @@ def test_configure_with_field_discovery_stores_fields(runner: CliRunner):
     assert final_config.fields["OWNER"].type == "relational"
 
 
+# ---------------------------------------------------------------------------
+# list — field priority: --fields > config.list_fields > _DEFAULT_LIST_FIELDS
+# ---------------------------------------------------------------------------
+
+def test_list_uses_config_list_fields_when_no_flag(runner: CliRunner):
+    """config.list_fields is used as default when --fields is not given."""
+    cfg = _make_app_config()
+    cfg.list_fields = ["TITLE", "FUNCTIONALITY", "URGENCY"]
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list"], catch_exceptions=False)
+            call_args = MockClient.return_value.list_items_by_report.call_args
+            assert call_args[1]["fields"] == ["TITLE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_list_explicit_fields_flag_overrides_config_list_fields(runner: CliRunner):
+    """--fields always wins over config.list_fields."""
+    cfg = _make_app_config()
+    cfg.list_fields = ["TITLE", "FUNCTIONALITY"]
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list", "--fields", "TITLE,STATE"], catch_exceptions=False)
+            call_args = MockClient.return_value.list_items_by_report.call_args
+            assert call_args[1]["fields"] == ["TITLE", "STATE"]
+
+
+def test_list_falls_back_to_default_when_config_list_fields_empty(runner: CliRunner):
+    """When config.list_fields is [], the hardcoded _DEFAULT_LIST_FIELDS is used."""
+    from sbm_cli.cli import _DEFAULT_LIST_FIELDS
+    cfg = _make_app_config()
+    cfg.list_fields = []
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list"], catch_exceptions=False)
+            call_args = MockClient.return_value.list_items_by_report.call_args
+            assert call_args[1]["fields"] == _DEFAULT_LIST_FIELDS
+
+
 def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
     user_input = (
         "https://sbm.test\n"

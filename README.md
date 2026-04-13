@@ -17,7 +17,7 @@ pip install sbm-cli
 ## Quick start
 
 ```bash
-sbm configure        # interactive setup wizard
+sbm configure setup  # interactive setup wizard
 sbm schema           # verify config and see available transitions
 sbm list             # list open tickets
 sbm get 02440942     # get ticket details
@@ -25,9 +25,10 @@ sbm get 02440942     # get ticket details
 
 ## Configuration
 
-Config is stored at `~/.sbm-cli/config.toml`. Run `sbm configure` to create it interactively.
+Config is stored at `~/.sbm-cli/config.toml`. Run `sbm configure setup` to create it interactively.
 
-Manual editing is needed for transitions and teams (transition IDs are instance-specific):
+Use `sbm configure transition <name>` to add or update a named transition interactively.
+Manual editing is still needed for teams (transition IDs are instance-specific):
 
 ```toml
 [connection]
@@ -39,6 +40,7 @@ verify_ssl = false          # set true for trusted certs
 [defaults]
 table_id  = 1000
 report_id = 2208
+list_fields = ["TITLE","STATE","FUNCTIONALITY","URGENCY"]  # optional; blank uses built-in default
 
 [transitions]
 assign    = { id = 155, fields = ["OWNER", "3RD_LEVEL_SPECIALIST"] }
@@ -60,10 +62,12 @@ my-team = { id = 155, name = "L3 My Team" }
 
 | Command | Description |
 |---------|-------------|
-| `sbm configure` | Interactive setup wizard |
+| `sbm configure setup` | Interactive setup wizard |
+| `sbm configure transition <name>` | Add/update a named transition interactively |
 | `sbm schema` | Machine-readable capabilities JSON |
 | `sbm list [--report N] [--filter N]` | List tickets |
 | `sbm get <ticket-id>` | Get ticket by display ID |
+| `sbm fields <ticket-id> [--fields F1,F2]` | List field definitions (dbnames, types, labels) |
 | `sbm transition <name> <ticket-id> --field K=V` | Run named transition |
 | `sbm transition run <ticket-id> --id N --field K=V` | Run raw transition by ID |
 | `sbm field-values <field> --table <table-id>` | Discover valid relational field values |
@@ -102,16 +106,8 @@ uv run pytest -m integration  # requires live SBM connection
 
 - **`[users]` config section** — map login names / display names to numeric user IDs so
   transitions accept `--field OWNER=jaroslav.burget` instead of `--field OWNER=15399`
-- **Dynamic columns in `--pretty list`** — derive table columns from whatever fields
-  were requested instead of hardcoded TITLE/STATE/OWNER/TEAM columns
-- **`sbm fields` command** — list all available field definitions for a table (dbnames,
-  types, labels) by querying the SBM API
 - **`--indent` flag** — output formatted JSON with indentation instead of a compact
   single line, for human readability
-- **Field discovery in `sbm configure`** — prompt for a sample ticket ID during setup,
-  fetch all its fields, store the schema in `~/.sbm-cli/config.toml` under `[fields]`,
-  and expose via `sbm schema` so AI assistants can discover available fields without
-  querying live tickets
 
 ## License
 

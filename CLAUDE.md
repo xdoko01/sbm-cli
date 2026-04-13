@@ -37,6 +37,10 @@ sbm list --filter 36                     # by filter ID
 sbm get 02440942                         # ticket detail by display ID
 sbm field-values FIELD --table TABLE_ID  # valid values for a relational field
 sbm teams                                # configured team slugs and IDs
+sbm configure setup                      # full interactive setup wizard
+sbm configure transition assign          # add/update a named transition interactively
+sbm fields 02440942                      # list all field dbnames, types, labels
+sbm fields 02440942 --fields FUNCTIONALITY,APPLICATION1,COUNTRY_IM,ROOT_CAUSE  # probe specific fields
 
 sbm transition assign 02440942 --field OWNER=316 --field 3RD_LEVEL_SPECIALIST=316
 sbm transition close 02440942 --field RESOLUTION="Fixed" --field ROOT_CAUSE=1701
@@ -45,6 +49,19 @@ sbm transition transfer 02440942 --field L3_SPECIALIST_GROUP=155
 
 sbm transition run 02440942 --id 155 --field OWNER=316  # raw transition by ID
 ```
+
+## Default list fields
+
+Set once in `~/.sbm-cli/config.toml` under `[defaults]`:
+
+```toml
+[defaults]
+list_fields = ["TITLE","STATE","OWNER","FUNCTIONALITY","URGENCY","COUNTRY_IM","ROOT_CAUSE"]
+```
+
+Or set during the wizard: `sbm configure setup` prompts for this.
+When absent or empty, the built-in default `TITLE,STATE,OWNER,SECONDARYOWNER,URGENCY,SEVERITY` is used.
+`--fields` always overrides this for a single invocation.
 
 ## Output format
 
@@ -67,6 +84,18 @@ Exit codes: 0=success, 1=API error, 2=config/auth error, 3=validation error.
 - `assign` and `transfer` transitions require a `startTransition` lock — the CLI handles this
 - `close` is a two-step transition (Start Solving → Resolved) — handled automatically
 - `L3_SPECIALIST_GROUP` must be sent as a JSON array — declared as `"list"` in config
+
+## Field value structure (SBM API quirk)
+
+Relational fields are returned in two forms depending on the endpoint:
+
+| Endpoint | Structure |
+|----------|-----------|
+| `getitemsbyitemid` / `GetItem` | `{"value": {"id": 3, "name": "High"}, "displayName": "..."}` |
+| `getitemsbylistingreport` / `getitemsbyreportfilter` | `{"id": 3, "name": "3 - Medium"}` |
+
+Both forms are handled transparently by `_field_val` (formatters) and `_classify_field` (client).
+When debugging blank `--pretty` columns, check which form the endpoint returns.
 
 ## ROOT_CAUSE common values
 

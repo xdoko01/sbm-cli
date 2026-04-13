@@ -110,3 +110,31 @@ def test_format_field_definitions():
     assert "relational" in output
     assert "TITLE" in output
     assert "text" in output
+
+
+def test_field_val_relational_no_wrapper_returns_name():
+    """URGENCY from listing endpoints: {"id": 13, "name": "3 - Medium"} — no "value" key."""
+    from sbm_cli.formatters import _field_val
+    item = {"fields": {"URGENCY": {"id": 13, "name": "3 - Medium"}}}
+    assert _field_val(item, "URGENCY") == "3 - Medium"
+
+
+def test_field_val_relational_no_wrapper_id_fallback():
+    """Falls back to id when name absent."""
+    from sbm_cli.formatters import _field_val
+    item = {"fields": {"URGENCY": {"id": 13}}}
+    assert _field_val(item, "URGENCY") == "13"
+
+
+def test_format_ticket_list_relational_no_wrapper():
+    """format_ticket_list renders fields returned without "value" wrapper."""
+    from sbm_cli import formatters
+    items = [{
+        "id": {"id": 1, "itemIdPrefixed": "00001"},
+        "fields": {
+            "TITLE": {"value": "Bug"},
+            "URGENCY": {"id": 13, "name": "3 - Medium"},
+        },
+    }]
+    output = formatters.format_ticket_list(items, columns=["TITLE", "URGENCY"])
+    assert "3 - Medium" in output

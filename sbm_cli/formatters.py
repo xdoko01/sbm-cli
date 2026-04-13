@@ -13,14 +13,26 @@ def _console() -> Console:
 
 
 def _field_val(item: dict, dbname: str) -> str:
-    """Extract display value from an SBM field dict."""
+    """Extract display value from an SBM field dict.
+
+    Handles two structures returned by the SBM API:
+      - {"value": {"id": 3, "name": "High"}, ...}  (get / getitemsbyitemid endpoints)
+      - {"id": 3, "name": "3 - Medium"}             (report / filter listing endpoints)
+    """
     f = item.get("fields", {}).get(dbname, {})
     if not isinstance(f, dict):
         return ""
     val = f.get("value")
-    if isinstance(val, dict):
+    if isinstance(val, dict) and "id" in val:
         return val.get("name", str(val.get("id", "")))
-    return str(val) if val is not None else ""
+    if val is not None:
+        return str(val)
+    # Relational fields from report/filter endpoints arrive without a "value" wrapper
+    if "name" in f:
+        return str(f["name"])
+    if "id" in f:
+        return str(f["id"])
+    return ""
 
 
 def format_ticket_list(items: list[dict], columns: list[str] | None = None) -> str:

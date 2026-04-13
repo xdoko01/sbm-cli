@@ -49,6 +49,7 @@ class Config:
     teams: dict[str, TeamConfig] = field(default_factory=dict)
     users: dict[str, UserConfig] = field(default_factory=dict)
     fields: dict[str, FieldDef] = field(default_factory=dict)
+    list_fields: list[str] = field(default_factory=list)
 
 
 class ConfigError(Exception):
@@ -69,6 +70,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
 
     conn = data.get("connection", {})
     defaults = data.get("defaults", {})
+    list_fields: list[str] = defaults.get("list_fields", [])
 
     missing = [k for k in ("host", "username", "password") if not conn.get(k)]
     if missing:
@@ -133,6 +135,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         teams=teams,
         users=users,
         fields=field_defs,
+        list_fields=list_fields,
     )
 
 
@@ -163,6 +166,9 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         f"table_id  = {config.table_id}",
         f"report_id = {config.report_id}",
     ]
+    if config.list_fields:
+        fields_str = ", ".join(f'"{f}"' for f in config.list_fields)
+        lines.append(f"list_fields = [{fields_str}]")
 
     for name, t in config.transitions.items():
         _validate_toml_key(name, "transitions")

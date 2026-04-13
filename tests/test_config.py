@@ -265,3 +265,53 @@ def test_save_config_round_trips_fields(tmp_path):
     assert loaded.fields["TITLE"].label == "Title"
     assert loaded.fields["OWNER"].type == "relational"
     assert loaded.fields["OWNER"].label == "Owner"
+
+
+def test_load_config_parses_list_fields(tmp_path):
+    toml = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+password = "p"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_id = 0
+list_fields = ["TITLE", "STATE", "FUNCTIONALITY", "URGENCY"]
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.list_fields == ["TITLE", "STATE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_load_config_no_list_fields_returns_empty_list(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(VALID_TOML, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.list_fields == []
+
+
+def test_save_config_round_trips_list_fields(tmp_path):
+    cfg = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+        list_fields=["TITLE", "FUNCTIONALITY", "URGENCY"],
+    )
+    path = tmp_path / "config.toml"
+    save_config(cfg, path)
+    loaded = load_config(path)
+    assert loaded.list_fields == ["TITLE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_save_config_empty_list_fields_omits_key(tmp_path):
+    cfg = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+        list_fields=[],
+    )
+    path = tmp_path / "config.toml"
+    save_config(cfg, path)
+    content = path.read_text()
+    assert "list_fields" not in content

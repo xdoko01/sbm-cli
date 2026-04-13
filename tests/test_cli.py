@@ -573,7 +573,9 @@ def test_fields_command_custom_table(runner: CliRunner):
                 ["fields", "02440942", "--table", "9999"],
                 catch_exceptions=False,
             )
-    MockClient.return_value.get_field_definitions.assert_called_once_with("02440942", 9999)
+    MockClient.return_value.get_field_definitions.assert_called_once_with(
+        "02440942", 9999, extra_fields=None
+    )
 
 
 def test_fields_command_not_found(runner: CliRunner):
@@ -711,6 +713,33 @@ def test_list_falls_back_to_default_when_config_list_fields_empty(runner: CliRun
             runner.invoke(main, ["list"], catch_exceptions=False)
             call_args = MockClient.return_value.list_items_by_report.call_args
             assert call_args[1]["fields"] == _DEFAULT_LIST_FIELDS
+
+
+def test_fields_cmd_passes_extra_fields(runner: CliRunner):
+    """--fields option is passed as extra_fields to get_field_definitions."""
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.return_value = [
+                {"dbname": "FUNCTIONALITY", "type": "relational", "label": "Functionality"},
+            ]
+            result = runner.invoke(
+                main,
+                ["fields", "02440942", "--fields", "FUNCTIONALITY,APPLICATION1"],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    call_kwargs = MockClient.return_value.get_field_definitions.call_args[1]
+    assert call_kwargs["extra_fields"] == ["FUNCTIONALITY", "APPLICATION1"]
+
+
+def test_fields_cmd_without_extra_fields_passes_none(runner: CliRunner):
+    """Without --fields, extra_fields=None is passed."""
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.get_field_definitions.return_value = []
+            runner.invoke(main, ["fields", "02440942"], catch_exceptions=False)
+    call_kwargs = MockClient.return_value.get_field_definitions.call_args[1]
+    assert call_kwargs["extra_fields"] is None
 
 
 def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):

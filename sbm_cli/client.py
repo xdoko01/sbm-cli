@@ -16,6 +16,24 @@ class SBMError(Exception):
         self.field = field
 
 
+def _classify_field(dbname: str, fdata: dict) -> dict:
+    """Classify an SBM field dict into {dbname, type, label}.
+
+    Handles both value-wrapper form and direct {id, name} form.
+    """
+    value = fdata.get("value")
+    if isinstance(value, dict) and "id" in value:
+        field_type = "relational"
+    elif value is None and "id" in fdata and "name" in fdata:
+        field_type = "relational"
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        field_type = "numeric"
+    else:
+        field_type = "text"
+    label = fdata.get("displayName") or fdata.get("name") or dbname
+    return {"dbname": dbname, "type": field_type, "label": label}
+
+
 class SBMClient:
     def __init__(self, host: str, username: str, password: str, verify_ssl: bool = True) -> None:
         self.host = host.rstrip("/")
@@ -141,32 +159,34 @@ class SBMClient:
 
         return sorted(results, key=lambda x: x["id"])
 
-    def get_field_definitions(self, display_id: str, table_id: int) -> list[dict]:
+    def get_field_definitions(self, display_id: str, table_id: int,
+                              extra_fields: list[str] | None = None) -> list[dict]:
         """Fetch field definitions by inspecting a sample ticket.
 
         Returns a sorted list of {dbname, type, label} dicts.
-        'type' is inferred: 'relational' for {id, name} values,
-        'numeric' for ints/floats, 'text' otherwise.
+        When extra_fields is given, a second API call forces those field
+        names to be included even if they have null values on this ticket.
+        Call-1 entries take precedence on collision.
         'label' comes from 'displayName' if present, then 'name', then dbname.
         """
         data = self.get_item_by_display_id(display_id, table_id, fields=None)
         item = data.get("item", {})
-        result: list[dict] = []
+        by_dbname: dict[str, dict] = {}
         for dbname, fdata in item.get("fields", {}).items():
             if not isinstance(fdata, dict):
                 continue
-            value = fdata.get("value")
-            if isinstance(value, dict) and "id" in value:
-                field_type = "relational"
-            elif value is None and "id" in fdata and "name" in fdata:
-                field_type = "relational"
-            elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                field_type = "numeric"
-            else:
-                field_type = "text"
-            label = fdata.get("displayName") or fdata.get("name") or dbname
-            result.append({"dbname": dbname, "type": field_type, "label": label})
-        return sorted(result, key=lambda x: x["dbname"])
+            by_dbname[dbname] = _classify_field(dbname, fdata)
+
+        if extra_fields:
+            extra_data = self.get_item_by_display_id(display_id, table_id, fields=extra_fields)
+            extra_item = extra_data.get("item", {})
+            for dbname, fdata in extra_item.get("fields", {}).items():
+                if not isinstance(fdata, dict):
+                    continue
+                if dbname not in by_dbname:
+                    by_dbname[dbname] = _classify_field(dbname, fdata)
+
+        return sorted(by_dbname.values(), key=lambda x: x["dbname"])
 
     def _post(self, url: str, body: dict, params: dict | None = None) -> dict:
         resp = self._session.post(url, json=body, params=params, timeout=30)

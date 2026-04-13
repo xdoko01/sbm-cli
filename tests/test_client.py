@@ -196,3 +196,100 @@ def test_get_field_definitions_label_from_display_name(mocker):
 
     owner = next(f for f in fields if f["dbname"] == "OWNER")
     assert owner["label"] == "Owner"
+
+
+def test_get_field_definitions_with_extra_fields_merges_results(mocker):
+    """extra_fields triggers a second API call; both sets of fields appear in output."""
+    resp1 = mocker.MagicMock()
+    resp1.status_code = 200
+    resp1.raise_for_status = mocker.MagicMock()
+    resp1.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "TITLE": {"value": "Test"},
+                "OWNER": {"value": {"id": 316, "name": "Smith"}},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    resp2 = mocker.MagicMock()
+    resp2.status_code = 200
+    resp2.raise_for_status = mocker.MagicMock()
+    resp2.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "FUNCTIONALITY": {"displayName": "Functionality", "value": None},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.side_effect = [resp1, resp2]
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    fields = client.get_field_definitions("02440942", 1000, extra_fields=["FUNCTIONALITY"])
+
+    dbnames = [f["dbname"] for f in fields]
+    assert "TITLE" in dbnames
+    assert "OWNER" in dbnames
+    assert "FUNCTIONALITY" in dbnames
+    assert dbnames == sorted(dbnames)
+    assert session_mock.return_value.post.call_count == 2
+
+
+def test_get_field_definitions_call1_wins_on_collision(mocker):
+    """When both calls return the same field, call-1 entry is kept."""
+    resp1 = mocker.MagicMock()
+    resp1.status_code = 200
+    resp1.raise_for_status = mocker.MagicMock()
+    resp1.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "OWNER": {"value": {"id": 316, "name": "Smith"}, "displayName": "Owner"},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    resp2 = mocker.MagicMock()
+    resp2.status_code = 200
+    resp2.raise_for_status = mocker.MagicMock()
+    resp2.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "OWNER": {"displayName": "Owner", "value": None},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.side_effect = [resp1, resp2]
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    fields = client.get_field_definitions("02440942", 1000, extra_fields=["OWNER"])
+
+    owner = next(f for f in fields if f["dbname"] == "OWNER")
+    assert owner["type"] == "relational"  # from call 1; call 2 would give "text"
+
+
+def test_get_field_definitions_without_extra_fields_makes_one_call(mocker):
+    """Without extra_fields, only one API call is made (unchanged behaviour)."""
+    resp = mocker.MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = mocker.MagicMock()
+    resp.json.return_value = {
+        "items": [{"id": {"id": 100, "itemIdPrefixed": "0001"}, "fields": {"TITLE": {"value": "T"}}}],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.return_value = resp
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    client.get_field_definitions("0001", 1000)
+    assert session_mock.return_value.post.call_count == 1

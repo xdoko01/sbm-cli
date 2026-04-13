@@ -492,20 +492,29 @@ def field_values(ctx: AppContext, field_name: str, table_id: int, max_probe: int
 @click.argument("ticket_id")
 @click.option("--table", "table_id", default=None, type=int,
               help="Table ID (defaults to configured table_id)")
+@click.option("--fields", "extra_fields", default=None,
+              help="Comma-separated field dbnames to probe explicitly "
+                   "(for fields absent from this ticket due to null values)")
 @pass_ctx
-def fields_cmd(ctx: AppContext, ticket_id: str, table_id: int | None) -> None:
+def fields_cmd(ctx: AppContext, ticket_id: str, table_id: int | None,
+               extra_fields: str | None) -> None:
     """List field definitions by inspecting a sample ticket.
 
     Fetches TICKET_ID and reports all field dbnames, inferred types, and labels.
     Uses the configured table_id by default; override with --table.
 
+    To discover fields that are null on this ticket, pass them explicitly:
+
+      sbm fields 02440942 --fields FUNCTIONALITY,APPLICATION1,COUNTRY_IM
+
     Example: sbm fields 02440942
     """
     tid = table_id if table_id is not None else ctx.config.table_id
+    extra = extra_fields.split(",") if extra_fields else None
     ctx.status(f"Fetching field definitions from ticket {ticket_id}...")
     field_defs: list = []
     try:
-        field_defs = ctx.client.get_field_definitions(ticket_id, tid)
+        field_defs = ctx.client.get_field_definitions(ticket_id, tid, extra_fields=extra)
     except PermissionError as exc:
         ctx.error("fields", "auth_error", str(exc), exit_code=2)
     except ValueError as exc:

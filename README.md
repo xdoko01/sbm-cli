@@ -27,6 +27,9 @@ sbm get 02440942     # get ticket details
 
 Config is stored at `~/.sbm-cli/config.toml`. Run `sbm configure setup` to create it interactively.
 
+The password is stored in **Windows Credential Manager** (never in the config file). If you have an
+existing config with a plaintext `password` field, it is migrated automatically on the next run.
+
 Use `sbm configure transition <name>` to add or update a named transition interactively.
 Manual editing is still needed for teams (transition IDs are instance-specific):
 
@@ -34,7 +37,6 @@ Manual editing is still needed for teams (transition IDs are instance-specific):
 [connection]
 host       = "https://sbm.example.com"
 username   = "myuser"
-password   = "mypass"
 verify_ssl = false          # set true for trusted certs
 
 [defaults]
@@ -101,13 +103,6 @@ uv run sbm configure
 uv run pytest
 uv run pytest -m integration  # requires live SBM connection
 ```
-
-## Planned features
-
-- **`[users]` config section** — map login names / display names to numeric user IDs so
-  transitions accept `--field OWNER=jaroslav.burget` instead of `--field OWNER=15399`
-- **`--indent` flag** — output formatted JSON with indentation instead of a compact
-  single line, for human readability
 
 ## License
 

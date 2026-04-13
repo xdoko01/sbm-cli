@@ -510,7 +510,7 @@ def fields_cmd(ctx: AppContext, ticket_id: str, table_id: int | None,
     Example: sbm fields 02440942
     """
     tid = table_id if table_id is not None else ctx.config.table_id
-    extra = extra_fields.split(",") if extra_fields else None
+    extra = [f.strip() for f in extra_fields.split(",") if f.strip()] if extra_fields else None
     ctx.status(f"Fetching field definitions from ticket {ticket_id}...")
     field_defs: list = []
     try:

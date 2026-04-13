@@ -82,13 +82,13 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config("", "", False, 0, 0), pretty, quiet, indent)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config("", "", "", False, 0, 0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config("", "", False, 0, 0), pretty, quiet, indent)
         return
 
     try:

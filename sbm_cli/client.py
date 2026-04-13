@@ -159,11 +159,13 @@ class SBMClient:
             value = fdata.get("value")
             if isinstance(value, dict) and "id" in value:
                 field_type = "relational"
+            elif value is None and "id" in fdata and "name" in fdata:
+                field_type = "relational"
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
                 field_type = "numeric"
             else:
                 field_type = "text"
-            label = fdata.get("displayName", dbname)
+            label = fdata.get("displayName") or fdata.get("name") or dbname
             result.append({"dbname": dbname, "type": field_type, "label": label})
         return sorted(result, key=lambda x: x["dbname"])
 

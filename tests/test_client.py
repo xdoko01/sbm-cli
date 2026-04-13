@@ -145,3 +145,54 @@ def test_get_field_definitions_returns_sorted_list(mocker):
     assert title["type"] == "text"
     priority = next(f for f in fields if f["dbname"] == "PRIORITY")
     assert priority["type"] == "numeric"
+
+
+def test_get_field_definitions_classifies_no_wrapper_relational(mocker):
+    """Fields returned as {id, name} without a 'value' key must be classified as relational."""
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = mocker.MagicMock()
+    mock_resp.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "URGENCY": {"id": 13, "name": "3 - Medium"},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.return_value = mock_resp
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    fields = client.get_field_definitions("02440942", 1000)
+
+    urgency = next(f for f in fields if f["dbname"] == "URGENCY")
+    assert urgency["type"] == "relational"
+    assert urgency["label"] == "3 - Medium"
+
+
+def test_get_field_definitions_label_from_display_name(mocker):
+    """label prefers displayName over name."""
+    mock_resp = mocker.MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = mocker.MagicMock()
+    mock_resp.json.return_value = {
+        "items": [{
+            "id": {"id": 100, "itemIdPrefixed": "02440942"},
+            "fields": {
+                "OWNER": {"value": {"id": 316, "name": "Smith"}, "displayName": "Owner"},
+            },
+        }],
+        "result": {"type": "OK"},
+    }
+    session_mock = mocker.patch("sbm_cli.client.requests.Session")
+    session_mock.return_value.post.return_value = mock_resp
+
+    from sbm_cli.client import SBMClient
+    client = SBMClient("https://sbm.test", "u", "p", verify_ssl=False)
+    fields = client.get_field_definitions("02440942", 1000)
+
+    owner = next(f for f in fields if f["dbname"] == "OWNER")
+    assert owner["label"] == "Owner"

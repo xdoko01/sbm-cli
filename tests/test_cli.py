@@ -857,6 +857,24 @@ def test_configure_transition_missing_config_exits_2(runner: CliRunner):
     assert result.exit_code == 2
 
 
+def test_configure_transition_save_config_error_exits_2(runner: CliRunner):
+    """configure transition exits 2 when save_config raises ConfigError (e.g. invalid name)."""
+    from sbm_cli.config import ConfigError
+    initial_cfg = Config(
+        host="https://sbm.test", username="u", password="p",
+        verify_ssl=False, table_id=1000, report_id=0,
+    )
+    with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
+        with patch("sbm_cli.cli.save_config", side_effect=ConfigError("invalid key")):
+            result = runner.invoke(
+                main,
+                ["configure", "transition", "bad name"],
+                input="155\n\n\n\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 2
+
+
 def test_configure_setup_saves_list_fields(runner: CliRunner):
     """configure setup persists list_fields when user provides them."""
     with patch("sbm_cli.cli.save_config") as mock_save:

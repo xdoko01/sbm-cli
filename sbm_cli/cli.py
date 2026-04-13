@@ -333,7 +333,7 @@ def list_tickets(ctx: AppContext, report_id: int | None,
                  filter_id: str | None, fields: str | None) -> None:
     """List tickets from a report or filter."""
     field_list = (
-        fields.split(",") if fields          # explicit --fields always wins
+        [f.strip() for f in fields.split(",") if f.strip()] if fields  # explicit --fields always wins
         else ctx.config.list_fields          # user's configured default
         or _DEFAULT_LIST_FIELDS              # hardcoded fallback when neither is set
     )

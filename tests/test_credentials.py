@@ -1,5 +1,12 @@
 from sbm_cli.credentials import service_name, get_password, set_password, delete_password
 
+# Note: the autouse mock_credentials fixture in conftest.py patches
+# sbm_cli.credentials.get_password at the module level. These tests import
+# the functions directly at module load time (before fixtures run), so the
+# locally-bound references here still point to the original function objects.
+# The fixture patches a different level (module namespace vs. local binding),
+# so both can coexist without interference.
+
 
 def test_service_name():
     assert service_name("https://sbm.example.com") == "sbm-cli:https://sbm.example.com"

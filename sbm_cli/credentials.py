@@ -26,5 +26,8 @@ def set_password(host: str, username: str, password: str) -> None:
 
 
 def delete_password(host: str, username: str) -> None:
-    """Remove password from Windows Credential Manager."""
+    """Remove password from Windows Credential Manager.
+
+    Raises keyring.errors.PasswordDeleteError if no credential exists for the given host/username.
+    """
     keyring.delete_password(service_name(host), username)

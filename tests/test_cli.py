@@ -16,7 +16,6 @@ def _make_app_config() -> Config:
     return Config(
         host="https://sbm.test",
         username="user",
-        password="pass",
         verify_ssl=False,
         table_id=1000,
         report_id=2208,
@@ -785,7 +784,7 @@ def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
 def test_configure_transition_adds_named_transition(runner: CliRunner):
     """configure transition writes a new transition into the loaded config."""
     initial_cfg = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=2208,
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
@@ -809,7 +808,7 @@ def test_configure_transition_adds_named_transition(runner: CliRunner):
 def test_configure_transition_with_pre_transition(runner: CliRunner):
     """configure transition saves pre_transition_id and pre_transition_optional."""
     initial_cfg = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
@@ -861,7 +860,7 @@ def test_configure_transition_save_config_error_exits_2(runner: CliRunner):
     """configure transition exits 2 when save_config raises ConfigError (e.g. invalid name)."""
     from sbm_cli.config import ConfigError
     initial_cfg = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):

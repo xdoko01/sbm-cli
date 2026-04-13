@@ -13,7 +13,6 @@ def sample_config():
     return Config(
         host="https://sbm.test",
         username="testuser",
-        password="testpass",
         verify_ssl=False,
         table_id=1000,
         report_id=2208,
@@ -38,3 +37,13 @@ def sample_config():
 @pytest.fixture
 def mock_session(mocker):
     return mocker.patch("sbm_cli.client.requests.Session")
+
+
+@pytest.fixture(autouse=True)
+def mock_credentials(mocker):
+    """Patch keyring calls globally so tests never hit real Windows Credential Manager.
+    Tests that need to verify missing credentials can override get_password locally:
+        mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    """
+    mocker.patch("sbm_cli.credentials.get_password", return_value="testpass")
+    mocker.patch("sbm_cli.credentials.set_password")

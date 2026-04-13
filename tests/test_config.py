@@ -10,7 +10,6 @@ VALID_TOML = """\
 [connection]
 host       = "https://sbm.test"
 username   = "user"
-password   = "pass"
 verify_ssl = false
 
 [defaults]
@@ -73,7 +72,7 @@ def test_load_config_missing_file_raises_config_error(tmp_path):
 
 def test_load_config_missing_required_field_raises(tmp_path):
     cfg_file = tmp_path / "config.toml"
-    cfg_file.write_text("[connection]\nusername = \"user\"\npassword = \"pass\"\n", encoding="utf-8")
+    cfg_file.write_text("[connection]\nusername = \"user\"\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="host"):
         load_config(cfg_file)
 
@@ -83,7 +82,6 @@ def test_save_and_reload_roundtrip(tmp_path):
     original = Config(
         host="https://sbm.example.com",
         username="myuser",
-        password="mypass",
         verify_ssl=True,
         table_id=1000,
         report_id=2208,
@@ -116,7 +114,6 @@ def test_save_and_reload_special_chars(tmp_path):
     cfg = Config(
         host="https://sbm.example.com",
         username="domain\\user",
-        password='p@ss"word',
         verify_ssl=True,
         table_id=1000,
         report_id=0,
@@ -124,7 +121,6 @@ def test_save_and_reload_special_chars(tmp_path):
     save_config(cfg, cfg_file)
     reloaded = load_config(cfg_file)
     assert reloaded.username == "domain\\user"
-    assert reloaded.password == 'p@ss"word'
 
 
 def test_save_config_invalid_transition_name_raises(tmp_path):
@@ -132,7 +128,6 @@ def test_save_config_invalid_transition_name_raises(tmp_path):
     cfg = Config(
         host="https://sbm.example.com",
         username="user",
-        password="pass",
         verify_ssl=True,
         table_id=1000,
         report_id=0,
@@ -147,7 +142,6 @@ def test_save_config_invalid_field_type_key_raises(tmp_path):
     cfg = Config(
         host="https://sbm.example.com",
         username="user",
-        password="pass",
         verify_ssl=True,
         table_id=1000,
         report_id=0,
@@ -164,7 +158,6 @@ def test_pre_transition_optional_without_id_roundtrip(tmp_path):
     cfg = Config(
         host="https://sbm.example.com",
         username="user",
-        password="pass",
         verify_ssl=True,
         table_id=1000,
         report_id=0,
@@ -184,7 +177,6 @@ def test_load_config_parses_users(tmp_path):
 [connection]
 host = "https://sbm.test"
 username = "u"
-password = "p"
 verify_ssl = false
 
 [defaults]
@@ -207,7 +199,7 @@ alice = { id = 316 }
 def test_save_config_round_trips_users(tmp_path):
     from sbm_cli.config import UserConfig
     config = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
         users={
             "alice": UserConfig(id=316),
@@ -227,7 +219,6 @@ def test_load_config_parses_fields(tmp_path):
 [connection]
 host = "https://sbm.test"
 username = "u"
-password = "p"
 verify_ssl = false
 
 [defaults]
@@ -251,7 +242,7 @@ OWNER = { type = "relational", label = "Owner" }
 def test_save_config_round_trips_fields(tmp_path):
     from sbm_cli.config import FieldDef
     config = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
         fields={
             "TITLE": FieldDef(dbname="TITLE", type="text", label="Title"),
@@ -272,7 +263,6 @@ def test_load_config_parses_list_fields(tmp_path):
 [connection]
 host = "https://sbm.test"
 username = "u"
-password = "p"
 verify_ssl = false
 
 [defaults]
@@ -295,7 +285,7 @@ def test_load_config_no_list_fields_returns_empty_list(tmp_path):
 
 def test_save_config_round_trips_list_fields(tmp_path):
     cfg = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
         list_fields=["TITLE", "FUNCTIONALITY", "URGENCY"],
     )
@@ -307,7 +297,7 @@ def test_save_config_round_trips_list_fields(tmp_path):
 
 def test_save_config_empty_list_fields_omits_key(tmp_path):
     cfg = Config(
-        host="https://sbm.test", username="u", password="p",
+        host="https://sbm.test", username="u",
         verify_ssl=False, table_id=1000, report_id=0,
         list_fields=[],
     )
@@ -315,3 +305,33 @@ def test_save_config_empty_list_fields_omits_key(tmp_path):
     save_config(cfg, path)
     content = path.read_text()
     assert "list_fields" not in content
+
+
+def test_load_config_no_password_required(tmp_path, mocker):
+    mocker.patch("sbm_cli.credentials.set_password")
+    toml_content = """\
+[connection]
+host     = "https://sbm.test"
+username = "user"
+verify_ssl = false
+
+[defaults]
+table_id  = 1000
+report_id = 0
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml_content, encoding="utf-8")
+    config = load_config(path)
+    assert config.host == "https://sbm.test"
+    assert config.username == "user"
+
+
+def test_save_config_does_not_write_password(tmp_path):
+    config = Config(
+        host="https://sbm.test", username="user",
+        verify_ssl=False, table_id=1000, report_id=0,
+    )
+    path = tmp_path / "config.toml"
+    save_config(config, path)
+    content = path.read_text()
+    assert "password" not in content

@@ -41,7 +41,6 @@ class FieldDef:
 class Config:
     host: str
     username: str
-    password: str
     verify_ssl: bool
     table_id: int
     report_id: int
@@ -72,7 +71,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     defaults = data.get("defaults", {})
     list_fields: list[str] = defaults.get("list_fields", [])
 
-    missing = [k for k in ("host", "username", "password") if not conn.get(k)]
+    missing = [k for k in ("host", "username") if not conn.get(k)]
     if missing:
         raise ConfigError(
             f"Missing required [connection] keys: {', '.join(missing)}"
@@ -127,7 +126,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     return Config(
         host=conn["host"],
         username=conn["username"],
-        password=conn["password"],
         verify_ssl=conn.get("verify_ssl", True),
         table_id=defaults.get("table_id", 1000),
         report_id=defaults.get("report_id", 0),
@@ -159,7 +157,6 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "[connection]",
         f'host       = "{_toml_str(config.host)}"',
         f'username   = "{_toml_str(config.username)}"',
-        f'password   = "{_toml_str(config.password)}"',
         f"verify_ssl = {'true' if config.verify_ssl else 'false'}",
         "",
         "[defaults]",

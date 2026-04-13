@@ -13,7 +13,7 @@ from sbm_cli.config import (
     Config, ConfigError, FieldDef, TransitionConfig, UserConfig,
     load_config, save_config, DEFAULT_CONFIG_PATH,
 )
-from sbm_cli import formatters
+from sbm_cli import credentials, formatters
 
 
 # ---------------------------------------------------------------------------
@@ -31,10 +31,11 @@ class AppContext:
     @property
     def client(self) -> SBMClient:
         if self._client is None:
+            password = credentials.get_password(self.config.host, self.config.username) or ""
             self._client = SBMClient(
                 host=self.config.host,
                 username=self.config.username,
-                password=self.config.password,
+                password=password,
                 verify_ssl=self.config.verify_ssl,
             )
         return self._client
@@ -146,11 +147,12 @@ def configure_setup(ctx: click.Context) -> None:
     )
 
     config = Config(
-        host=host, username=username, password=password,
+        host=host, username=username,
         verify_ssl=verify_ssl, table_id=table_id, report_id=report_id,
         list_fields=list_fields,
     )
     save_config(config)
+    credentials.set_password(host, username, password)
     click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
 
     click.echo("Testing connection...", err=True)

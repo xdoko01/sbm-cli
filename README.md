@@ -81,6 +81,7 @@ my-team = { id = 155, name = "L3 My Team" }
 --pretty / -H   Human-readable output (rich tables)
 --config PATH   Override config file location
 --quiet         Suppress stderr status messages
+--indent        Output formatted JSON with indentation
 ```
 
 ## Output format

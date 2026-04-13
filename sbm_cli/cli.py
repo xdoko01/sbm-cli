@@ -31,7 +31,12 @@ class AppContext:
     @property
     def client(self) -> SBMClient:
         if self._client is None:
-            password = credentials.get_password(self.config.host, self.config.username) or ""
+            password = credentials.get_password(self.config.host, self.config.username)
+            if password is None:
+                raise PermissionError(
+                    "No password found in Windows Credential Manager. "
+                    "Run 'sbm configure' to set up credentials."
+                )
             self._client = SBMClient(
                 host=self.config.host,
                 username=self.config.username,
@@ -82,13 +87,13 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config("", "", False, 0, 0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_id=0), pretty, quiet, indent)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config("", "", False, 0, 0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_id=0), pretty, quiet, indent)
         return
 
     try:

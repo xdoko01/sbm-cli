@@ -904,3 +904,29 @@ def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
                 catch_exceptions=False,
             )
     assert "SBM host" in result.output
+
+
+def test_missing_credentials_returns_auth_error(runner: CliRunner, mocker):
+    mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient"):
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "auth_error"
+    assert "sbm configure" in data["error"]["message"]
+
+
+def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
+    set_pw = mocker.patch("sbm_cli.credentials.set_password")
+    with patch("sbm_cli.cli.SBMClient") as MockClient:
+        MockClient.return_value.check_auth.return_value = None
+        result = runner.invoke(
+            main,
+            ["configure", "setup"],
+            input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 0
+    set_pw.assert_called_once_with("https://sbm.test", "user", "secretpass")

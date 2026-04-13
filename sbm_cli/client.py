@@ -147,8 +147,7 @@ class SBMClient:
         Returns a sorted list of {dbname, type, label} dicts.
         'type' is inferred: 'relational' for {id, name} values,
         'numeric' for ints/floats, 'text' otherwise.
-        'label' comes from 'displayName' in the API response if present,
-        otherwise falls back to dbname.
+        'label' comes from 'displayName' if present, then 'name', then dbname.
         """
         data = self.get_item_by_display_id(display_id, table_id, fields=None)
         item = data.get("item", {})

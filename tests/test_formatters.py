@@ -128,7 +128,6 @@ def test_field_val_relational_no_wrapper_id_fallback():
 
 def test_format_ticket_list_relational_no_wrapper():
     """format_ticket_list renders fields returned without "value" wrapper."""
-    from sbm_cli import formatters
     items = [{
         "id": {"id": 1, "itemIdPrefixed": "00001"},
         "fields": {

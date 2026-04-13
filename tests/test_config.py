@@ -335,3 +335,33 @@ def test_save_config_does_not_write_password(tmp_path):
     save_config(config, path)
     content = path.read_text()
     assert "password" not in content
+
+
+def test_load_config_migrates_plaintext_password(tmp_path, mocker):
+    set_pw = mocker.patch("sbm_cli.credentials.set_password")
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("""\
+[connection]
+host     = "https://sbm.test"
+username = "user"
+password = "oldpass"
+verify_ssl = false
+
+[defaults]
+table_id  = 1000
+report_id = 0
+""", encoding="utf-8")
+    config = load_config(cfg_file)
+    set_pw.assert_called_once_with("https://sbm.test", "user", "oldpass")
+    content = cfg_file.read_text()
+    assert "password" not in content
+    assert "oldpass" not in content
+    assert config.host == "https://sbm.test"
+
+
+def test_load_config_no_migration_when_no_password(tmp_path, mocker):
+    set_pw = mocker.patch("sbm_cli.credentials.set_password")
+    path = tmp_path / "config.toml"
+    path.write_text(VALID_TOML, encoding="utf-8")
+    load_config(path)
+    set_pw.assert_not_called()

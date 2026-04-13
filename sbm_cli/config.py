@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,6 +69,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         raise ConfigError(f"Failed to read config file: {exc}") from exc
 
     conn = data.get("connection", {})
+    raw_password = conn.pop("password", None)  # Detected for migration; not stored in Config
     defaults = data.get("defaults", {})
     list_fields: list[str] = defaults.get("list_fields", [])
 
@@ -123,7 +125,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
             label=raw.get("label", dbname),
         )
 
-    return Config(
+    config = Config(
         host=conn["host"],
         username=conn["username"],
         verify_ssl=conn.get("verify_ssl", True),
@@ -135,6 +137,14 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         fields=field_defs,
         list_fields=list_fields,
     )
+
+    if raw_password:
+        from sbm_cli import credentials
+        credentials.set_password(config.host, config.username, raw_password)
+        save_config(config, path)
+        print("Password migrated to Windows Credential Manager.", file=sys.stderr)
+
+    return config
 
 
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')

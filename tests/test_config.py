@@ -365,3 +365,45 @@ def test_load_config_no_migration_when_no_password(tmp_path, mocker):
     path.write_text(VALID_TOML, encoding="utf-8")
     load_config(path)
     set_pw.assert_not_called()
+
+
+def test_load_config_parses_optional_fields(tmp_path):
+    toml = """\
+[connection]
+host       = "https://sbm.test"
+username   = "user"
+verify_ssl = false
+
+[defaults]
+table_id  = 1000
+report_id = 0
+
+[transitions.assign]
+id              = 155
+fields          = ["OWNER", "3RD_LEVEL_SPECIALIST"]
+optional_fields = ["SOLUTION_STEPS"]
+"""
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(toml, encoding="utf-8")
+    cfg = load_config(cfg_file)
+    assert cfg.transitions["assign"].optional_fields == ["SOLUTION_STEPS"]
+
+
+def test_load_config_optional_fields_defaults_to_empty(tmp_path):
+    toml = """\
+[connection]
+host       = "https://sbm.test"
+username   = "user"
+verify_ssl = false
+
+[defaults]
+table_id  = 1000
+report_id = 0
+
+[transitions]
+assign = { id = 155, fields = ["OWNER"] }
+"""
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(toml, encoding="utf-8")
+    cfg = load_config(cfg_file)
+    assert cfg.transitions["assign"].optional_fields == []

@@ -74,6 +74,7 @@ pass_ctx = click.make_pass_decorator(AppContext)
 # ---------------------------------------------------------------------------
 
 @click.group()
+@click.version_option(package_name="sbm-cli")
 @click.option("--pretty", "-H", is_flag=True, help="Human-readable output")
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="Override config file location")

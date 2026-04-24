@@ -44,11 +44,26 @@ table_id  = 1000
 report_id = 2208
 list_fields = ["TITLE","STATE","FUNCTIONALITY","URGENCY"]  # optional; blank uses built-in default
 
-[transitions]
-assign    = { id = 155, fields = ["OWNER", "3RD_LEVEL_SPECIALIST"] }
-close     = { id = 19,  fields = ["RESOLUTION", "ROOT_CAUSE"], pre_transition_id = 148, pre_transition_optional = true }
-return-l2 = { id = 88,  fields = ["RETURN_REASON", "RETURN_NOTE"] }
-transfer  = { id = 140, fields = ["L3_SPECIALIST_GROUP"] }
+[transitions.assign]
+id              = 155
+fields          = ["OWNER", "3RD_LEVEL_SPECIALIST"]
+optional_fields = ["SOLUTION_STEPS"]   # optional comment field
+
+[transitions.close]
+id                      = 19
+fields                  = ["RESOLUTION", "ROOT_CAUSE"]
+optional_fields         = ["SOLUTION_STEPS"]
+pre_transition_id       = 148
+pre_transition_optional = true
+
+[transitions.return-l2]
+id     = 88
+fields = ["RETURN_REASON", "RETURN_NOTE", "SOLUTION_STEPS"]  # SOLUTION_STEPS required here
+
+[transitions.transfer]
+id              = 140
+fields          = ["L3_SPECIALIST_GROUP"]
+optional_fields = ["SOLUTION_STEPS"]
 
 [transitions.transfer.field_types]
 L3_SPECIALIST_GROUP = "list"
@@ -77,7 +92,10 @@ my-team = { id = 155, name = "L3 My Team" }
 
 ## Global flags
 
+Global flags must appear **before** the subcommand: `sbm --pretty list`, not `sbm list --pretty`.
+
 ```
+--version       Show installed version and exit
 --pretty / -H   Human-readable output (rich tables)
 --config PATH   Override config file location
 --quiet         Suppress stderr status messages
@@ -104,6 +122,30 @@ uv run sbm configure
 uv run pytest
 uv run pytest -m integration  # requires live SBM connection
 ```
+
+## Changelog
+
+### 0.3.1
+- `sbm --version` flag added
+- README: version changelog, updated config example with `optional_fields`
+
+### 0.3.0
+- `optional_fields` per transition — `SOLUTION_STEPS` ("Add your comment") is now discoverable on all transitions via `sbm schema`
+- `sbm --pretty schema` shows `— optional: SOLUTION_STEPS` for each supporting transition
+- Named `transition` command warns on stderr when an unrecognised field is passed
+- `CLAUDE.md` updated with AI instruction to ask users whether to add a comment before executing any transition
+
+### 0.2.0
+- Passwords stored in **Windows Credential Manager** (keyring); auto-migrated from plaintext config
+- `configure transition` subcommand for interactive transition setup
+- `list_fields` config key for customisable default columns in `sbm list`
+- `[users]` config section — resolve login names to user IDs in transitions
+- `sbm fields` command — list field dbnames, types, and labels from a sample ticket
+- `--indent` global flag for pretty-printed JSON output
+
+### 0.1.0
+- Initial release: `configure`, `schema`, `list`, `get`, `transition`, `field-values`, `teams`
+- Named transitions with required fields, pre-transition support, relational field type handling
 
 ## License
 

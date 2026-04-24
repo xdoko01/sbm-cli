@@ -443,6 +443,75 @@ def test_transition_unknown_string_field_passes_through(runner: CliRunner):
     assert call_kwargs["field_values"]["3RD_LEVEL_SPECIALIST"] == 316
 
 
+def test_transition_warns_on_unknown_field(runner: CliRunner):
+    """Fields not in required or optional lists emit a warning to stderr but still proceed."""
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    with patch("sbm_cli.cli.load_config", return_value=config):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.get_item_by_display_id.return_value = {
+                "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+                "result": {"type": "OK"},
+            }
+            mock_client.start_transition.return_value = 42
+            mock_client.update_item.return_value = {
+                "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+            }
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=316",
+                 "--field", "3RD_LEVEL_SPECIALIST=316",
+                 "--field", "UNKNOWN_FIELD=foo"],
+                catch_exceptions=False,
+            )
+    # Should succeed despite unknown field
+    assert result.exit_code == 0
+    # CliRunner captures stderr in result.output (mix_stderr=True by default)
+    assert "Warning: unknown fields" in result.output
+    assert "UNKNOWN_FIELD" in result.output
+    # Field is still sent to the API
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["UNKNOWN_FIELD"] == "foo"
+
+
+def test_transition_with_optional_field_passes_to_api(runner: CliRunner):
+    """SOLUTION_STEPS in optional_fields is sent to the API without warnings."""
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    with patch("sbm_cli.cli.load_config", return_value=config):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.get_item_by_display_id.return_value = {
+                "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+                "result": {"type": "OK"},
+            }
+            mock_client.start_transition.return_value = 42
+            mock_client.update_item.return_value = {
+                "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+            }
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=316",
+                 "--field", "3RD_LEVEL_SPECIALIST=316",
+                 "--field", "SOLUTION_STEPS=Taking ownership."],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    # No warning for a known optional field
+    assert "Warning" not in result.output
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["SOLUTION_STEPS"] == "Taking ownership."
+
+
 # ---------------------------------------------------------------------------
 # field-values
 # ---------------------------------------------------------------------------

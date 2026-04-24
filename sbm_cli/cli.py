@@ -517,6 +517,14 @@ def transition(ctx: AppContext, name: str, ticket_id: str,
                   f"Missing required fields for '{name}': {', '.join(missing)}",
                   exit_code=3)
 
+    known_fields = set(t.fields) | set(t.optional_fields)
+    unknown = [k for k in field_values if k not in known_fields]
+    if unknown:
+        click.echo(
+            f"Warning: unknown fields for '{name}' (will be sent anyway): {', '.join(unknown)}",
+            err=True,
+        )
+
     field_values = _apply_field_types(field_values, t.field_types)
 
     try:

@@ -186,6 +186,9 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         lines.append(f"id = {t.id}")
         fields_str = ", ".join(f'"{f}"' for f in t.fields)
         lines.append(f"fields = [{fields_str}]")
+        if t.optional_fields:
+            opt_str = ", ".join(f'"{f}"' for f in t.optional_fields)
+            lines.append(f"optional_fields = [{opt_str}]")
         if t.pre_transition_id is not None:
             lines.append(f"pre_transition_id = {t.pre_transition_id}")
         if t.pre_transition_optional:

@@ -407,3 +407,21 @@ assign = { id = 155, fields = ["OWNER"] }
     cfg_file.write_text(toml, encoding="utf-8")
     cfg = load_config(cfg_file)
     assert cfg.transitions["assign"].optional_fields == []
+
+
+def test_save_and_reload_roundtrip_optional_fields(tmp_path):
+    cfg = Config(
+        host="https://sbm.test", username="user", verify_ssl=False,
+        table_id=1000, report_id=0,
+        transitions={
+            "assign": TransitionConfig(
+                id=155,
+                fields=["OWNER"],
+                optional_fields=["SOLUTION_STEPS"],
+            )
+        },
+    )
+    path = tmp_path / "config.toml"
+    save_config(cfg, path)
+    reloaded = load_config(path)
+    assert reloaded.transitions["assign"].optional_fields == ["SOLUTION_STEPS"]

@@ -282,6 +282,7 @@ def schema(ctx: AppContext) -> None:
             name: {
                 "id": t.id,
                 "required_fields": t.fields,
+                **({"optional_fields": t.optional_fields} if t.optional_fields else {}),
                 **({"field_types": t.field_types} if t.field_types else {}),
                 **({"pre_transition_id": t.pre_transition_id} if t.pre_transition_id else {}),
             }

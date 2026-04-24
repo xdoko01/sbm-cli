@@ -63,6 +63,27 @@ def test_schema_pretty(runner: CliRunner):
     assert "155" in result.output
 
 
+def test_schema_json_includes_optional_fields(runner: CliRunner):
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    result = _invoke(runner, ["schema"], config=config)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assign = data["data"]["transitions"]["assign"]
+    assert assign["optional_fields"] == ["SOLUTION_STEPS"]
+
+
+def test_schema_json_omits_optional_fields_when_empty(runner: CliRunner):
+    result = _invoke(runner, ["schema"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assign = data["data"]["transitions"]["assign"]
+    assert "optional_fields" not in assign
+
+
 # ---------------------------------------------------------------------------
 # teams
 # ---------------------------------------------------------------------------

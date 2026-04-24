@@ -75,7 +75,11 @@ def format_schema(schema: dict) -> str:
     ]
     for name, t in schema.get("transitions", {}).items():
         req = ", ".join(t.get("required_fields", []))
-        lines.append(f"  {name} (id={t.get('id')}) — required: {req or 'none'}")
+        opt = ", ".join(t.get("optional_fields", []))
+        line = f"  {name} (id={t.get('id')}) — required: {req or 'none'}"
+        if opt:
+            line += f" — optional: {opt}"
+        lines.append(line)
     lines += ["", "Teams:"]
     for slug, team in schema.get("teams", {}).items():
         lines.append(f"  {slug}: {team.get('name')} (id={team.get('id')})")

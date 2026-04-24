@@ -15,6 +15,7 @@ DEFAULT_CONFIG_PATH = Path.home() / ".sbm-cli" / "config.toml"
 class TransitionConfig:
     id: int
     fields: list[str] = field(default_factory=list)
+    optional_fields: list[str] = field(default_factory=list)
     field_types: dict[str, str] = field(default_factory=dict)
     pre_transition_id: int | None = None
     pre_transition_optional: bool = False
@@ -87,6 +88,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
             transitions[name] = TransitionConfig(
                 id=raw["id"],
                 fields=raw.get("fields", []),
+                optional_fields=raw.get("optional_fields", []),
                 field_types=raw.get("field_types", {}),
                 pre_transition_id=raw.get("pre_transition_id"),
                 pre_transition_optional=raw.get("pre_transition_optional", False),
@@ -184,6 +186,9 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         lines.append(f"id = {t.id}")
         fields_str = ", ".join(f'"{f}"' for f in t.fields)
         lines.append(f"fields = [{fields_str}]")
+        if t.optional_fields:
+            opt_str = ", ".join(f'"{f}"' for f in t.optional_fields)
+            lines.append(f"optional_fields = [{opt_str}]")
         if t.pre_transition_id is not None:
             lines.append(f"pre_transition_id = {t.pre_transition_id}")
         if t.pre_transition_optional:

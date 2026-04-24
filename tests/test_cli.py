@@ -63,6 +63,44 @@ def test_schema_pretty(runner: CliRunner):
     assert "155" in result.output
 
 
+def test_schema_json_includes_optional_fields(runner: CliRunner):
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    result = _invoke(runner, ["schema"], config=config)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assign = data["data"]["transitions"]["assign"]
+    assert assign["optional_fields"] == ["SOLUTION_STEPS"]
+
+
+def test_schema_json_omits_optional_fields_when_empty(runner: CliRunner):
+    result = _invoke(runner, ["schema"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assign = data["data"]["transitions"]["assign"]
+    assert "optional_fields" not in assign
+
+
+def test_schema_pretty_shows_optional_fields(runner: CliRunner):
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    result = _invoke(runner, ["--pretty", "schema"], config=config)
+    assert result.exit_code == 0
+    assert "optional: SOLUTION_STEPS" in result.output
+
+
+def test_schema_pretty_omits_optional_when_empty(runner: CliRunner):
+    result = _invoke(runner, ["--pretty", "schema"])
+    assert result.exit_code == 0
+    assert "optional:" not in result.output
+
+
 # ---------------------------------------------------------------------------
 # teams
 # ---------------------------------------------------------------------------
@@ -403,6 +441,75 @@ def test_transition_unknown_string_field_passes_through(runner: CliRunner):
     assert call_kwargs["field_values"]["OWNER"] == "bob.unknown"
     # Numeric strings are still coerced to int by _parse_fields
     assert call_kwargs["field_values"]["3RD_LEVEL_SPECIALIST"] == 316
+
+
+def test_transition_warns_on_unknown_field(runner: CliRunner):
+    """Fields not in required or optional lists emit a warning to stderr but still proceed."""
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    with patch("sbm_cli.cli.load_config", return_value=config):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.get_item_by_display_id.return_value = {
+                "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+                "result": {"type": "OK"},
+            }
+            mock_client.start_transition.return_value = 42
+            mock_client.update_item.return_value = {
+                "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+            }
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=316",
+                 "--field", "3RD_LEVEL_SPECIALIST=316",
+                 "--field", "UNKNOWN_FIELD=foo"],
+                catch_exceptions=False,
+            )
+    # Should succeed despite unknown field
+    assert result.exit_code == 0
+    # CliRunner captures stderr in result.output (mix_stderr=True by default)
+    assert "Warning: unknown fields" in result.output
+    assert "UNKNOWN_FIELD" in result.output
+    # Field is still sent to the API
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["UNKNOWN_FIELD"] == "foo"
+
+
+def test_transition_with_optional_field_passes_to_api(runner: CliRunner):
+    """SOLUTION_STEPS in optional_fields is sent to the API without warnings."""
+    config = _make_app_config()
+    config.transitions["assign"] = TransitionConfig(
+        id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"],
+        optional_fields=["SOLUTION_STEPS"],
+    )
+    with patch("sbm_cli.cli.load_config", return_value=config):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.get_item_by_display_id.return_value = {
+                "item": {"id": {"id": 100, "itemIdPrefixed": "02440942"}, "fields": {}},
+                "result": {"type": "OK"},
+            }
+            mock_client.start_transition.return_value = 42
+            mock_client.update_item.return_value = {
+                "item": {"id": {"id": 100}}, "result": {"type": "OK"}
+            }
+            result = runner.invoke(
+                main,
+                ["transition", "assign", "02440942",
+                 "--field", "OWNER=316",
+                 "--field", "3RD_LEVEL_SPECIALIST=316",
+                 "--field", "SOLUTION_STEPS=Taking ownership."],
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    # No warning for a known optional field
+    assert "Warning" not in result.output
+    call_kwargs = MockClient.return_value.update_item.call_args[1]
+    assert call_kwargs["field_values"]["SOLUTION_STEPS"] == "Taking ownership."
 
 
 # ---------------------------------------------------------------------------
@@ -920,13 +1027,14 @@ def test_missing_credentials_returns_auth_error(runner: CliRunner, mocker):
 
 def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
     set_pw = mocker.patch("sbm_cli.credentials.set_password")
-    with patch("sbm_cli.cli.SBMClient") as MockClient:
-        MockClient.return_value.check_auth.return_value = None
-        result = runner.invoke(
-            main,
-            ["configure", "setup"],
-            input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
-            catch_exceptions=False,
-        )
+    with patch("sbm_cli.cli.save_config"):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(
+                main,
+                ["configure", "setup"],
+                input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
+                catch_exceptions=False,
+            )
     assert result.exit_code == 0
     set_pw.assert_called_once_with("https://sbm.test", "user", "secretpass")

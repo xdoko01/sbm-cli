@@ -27,6 +27,17 @@ sbm field-values RETURN_REASON --table 1080
 
 **Never guess relational field IDs.**
 
+## Optional fields on transitions
+
+`SOLUTION_STEPS` is a free-text journal field available on all transitions. In the SBM web UI it appears as "Add your comment:" on the transition form and "Solution steps:" on the ticket view.
+
+- **Type:** journal (each transition appends a new entry — previous entries are preserved)
+- **Required on:** `return-l2` (already in `fields` list)
+- **Optional on:** all other named transitions (`assign`, `close`, `transfer`, `start-solving`, `email-initiator`)
+- **AI instruction:** Before executing any transition, ask the user if they want to add a comment. If yes, include `--field SOLUTION_STEPS="<comment>"`.
+
+Run `sbm schema` to see which transitions have `optional_fields` configured.
+
 ## Commands reference
 
 ```bash
@@ -43,8 +54,10 @@ sbm fields 02440942                      # list all field dbnames, types, labels
 sbm fields 02440942 --fields FUNCTIONALITY,APPLICATION1,COUNTRY_IM,ROOT_CAUSE  # probe specific fields
 
 sbm transition assign 02440942 --field OWNER=316 --field 3RD_LEVEL_SPECIALIST=316
+sbm transition assign 02440942 --field OWNER=316 --field 3RD_LEVEL_SPECIALIST=316 --field SOLUTION_STEPS="Taking ownership, will investigate."
 sbm transition close 02440942 --field RESOLUTION="Fixed" --field ROOT_CAUSE=1701
-sbm transition return-l2 02440942 --field RETURN_REASON=3 --field RETURN_NOTE="Missing logs"
+sbm transition close 02440942 --field RESOLUTION="Fixed" --field ROOT_CAUSE=1701 --field SOLUTION_STEPS="Root cause identified and resolved."
+sbm transition return-l2 02440942 --field RETURN_REASON=3 --field RETURN_NOTE="Missing logs" --field SOLUTION_STEPS="Returning to L2 — missing diagnostic logs."
 sbm transition transfer 02440942 --field L3_SPECIALIST_GROUP=155
 
 sbm transition run 02440942 --id 155 --field OWNER=316  # raw transition by ID

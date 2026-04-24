@@ -1,7 +1,8 @@
 # sbm-cli — Claude Code Integration Guide
 
 `sbm-cli` is a CLI tool for the SBM 12.0 JSON API. Use it via Bash tool calls.
-All commands output JSON by default. Use `--pretty` for human-readable output.
+All commands output JSON by default. Use `--pretty` (global flag) for human-readable output.
+`--pretty` must come **before** the subcommand: `sbm --pretty list`, NOT `sbm list --pretty`.
 
 ## Setup check
 
@@ -43,9 +44,11 @@ Run `sbm schema` to see which transitions have `optional_fields` configured.
 ```bash
 sbm schema                               # capabilities, transitions, teams
 sbm list                                 # tickets from default report
+sbm --pretty list                        # human-readable table output
 sbm list --report 2208                   # specific report
 sbm list --filter 36                     # by filter ID
 sbm get 02440942                         # ticket detail by display ID
+sbm --pretty get 02440942               # human-readable ticket detail
 sbm field-values FIELD --table TABLE_ID  # valid values for a relational field
 sbm teams                                # configured team slugs and IDs
 sbm configure setup                      # full interactive setup wizard
@@ -78,7 +81,7 @@ When absent or empty, the built-in default `TITLE,STATE,OWNER,SECONDARYOWNER,URG
 
 ## Output format
 
-All commands (except `--pretty`) return:
+All commands (except when `--pretty` is used) return:
 ```json
 {"ok": true/false, "command": "...", "data": {...}}
 ```

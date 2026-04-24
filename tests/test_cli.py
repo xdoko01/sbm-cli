@@ -1027,13 +1027,14 @@ def test_missing_credentials_returns_auth_error(runner: CliRunner, mocker):
 
 def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
     set_pw = mocker.patch("sbm_cli.credentials.set_password")
-    with patch("sbm_cli.cli.SBMClient") as MockClient:
-        MockClient.return_value.check_auth.return_value = None
-        result = runner.invoke(
-            main,
-            ["configure", "setup"],
-            input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
-            catch_exceptions=False,
-        )
+    with patch("sbm_cli.cli.save_config"):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(
+                main,
+                ["configure", "setup"],
+                input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
+                catch_exceptions=False,
+            )
     assert result.exit_code == 0
     set_pw.assert_called_once_with("https://sbm.test", "user", "secretpass")

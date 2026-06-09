@@ -1,6 +1,6 @@
 # sbm-cli — Installation and Usage Manual
 
-**Version:** 0.3.1  
+**Version:** 0.3.2  
 **Date:** 2026-06-09  
 **Platform:** Windows 10 / Windows 11
 
@@ -111,7 +111,7 @@ sbm --version
 Expected output:
 
 ```
-sbm-cli, version 0.3.1
+sbm, version 0.3.1
 ```
 
 If the command is not found, close and reopen your terminal window and try again.
@@ -166,7 +166,7 @@ list_fields = ["TITLE", "STATE", "OWNER"]
 After configuration, run a quick test:
 
 ```
-sbm list --pretty
+sbm --pretty list
 ```
 
 If the connection succeeds you will see a table of your open tickets. If it fails with an authentication error, re-run `sbm configure setup` to correct your credentials.
@@ -276,8 +276,10 @@ These flags can be placed immediately after `sbm`, before any subcommand:
 ```
 sbm --pretty list
 sbm --indent get INC-12345
-sbm --config C:\alt\config.toml list
+sbm --config C:/alt/config.toml list
 ```
+
+> **Note:** Use forward slashes (`/`) or double backslashes (`\\`) in paths passed to `--config`; a single `\` is treated as an escape character by the shell.
 
 ---
 
@@ -327,17 +329,26 @@ Prints the full capability summary of your current configuration: all named tran
 
 ```
 sbm schema
-sbm schema --pretty
+sbm --pretty schema
 ```
 
 Use this command to discover what transitions are available and what fields they expect.
 
-**Sample output (--pretty):**
+**Sample output (`sbm --pretty schema`):**
 
 ```
-Transitions: assign, close, return
-Teams: windows-l3, networking-l3
-Fields: TITLE, STATE, OWNER, L3_SPECIALIST_GROUP, SOLUTION_STEPS
+Host:           https://sbm.example.com
+Default table:  1000
+Default report: 2208
+
+Transitions:
+  assign (id=155) — required: OWNER, L3_SPECIALIST_GROUP — optional: SOLUTION_STEPS
+  close (id=160) — required: RESOLUTION, ROOT_CAUSE — optional: SOLUTION_STEPS
+  return-l2 (id=16) — required: RETURN_REASON, RETURN_NOTE, SOLUTION_STEPS
+
+Teams:
+  windows-l3: L3 Windows Support (id=155)
+  networking-l3: L3 Networking (id=160)
 ```
 
 ---
@@ -348,7 +359,7 @@ Lists tickets from the default report or a specified report/filter.
 
 ```
 sbm list
-sbm list --pretty
+sbm --pretty list
 sbm list --report 2210
 sbm list --filter "My Open Tickets"
 sbm list --fields TITLE,STATE,OWNER,FUNCTIONALITY
@@ -360,7 +371,7 @@ sbm list --fields TITLE,STATE,OWNER,FUNCTIONALITY
 | `--filter N` | — | SBM filter ID or filter name |
 | `--fields F1,F2` | `list_fields` from config | Comma-separated field database names to include |
 
-**Tip:** Use `--pretty` to get a readable table. Omit it when piping to other tools or scripts.
+**Tip:** Use `sbm --pretty list` to get a readable table. Omit `--pretty` when piping to other tools or scripts.
 
 ---
 
@@ -370,7 +381,7 @@ Shows the details of a single ticket. By default returns all fields; use `--fiel
 
 ```
 sbm get INC-12345
-sbm get INC-12345 --pretty
+sbm --pretty get INC-12345
 sbm get INC-12345 --fields TITLE,STATE,DESCRIPTION,OWNER
 ```
 
@@ -378,6 +389,8 @@ sbm get INC-12345 --fields TITLE,STATE,DESCRIPTION,OWNER
 |---|---|
 | `<ticket-id>` | The ticket display ID, for example `INC-12345` |
 | `--fields F1,F2` | Comma-separated list of field names to return (default: all) |
+
+> **Known limitation:** In `--pretty` mode, relational fields (OWNER, CONTACT, SUBMITTER, etc.) currently display blank. Use the default JSON output to see their values: `sbm get INC-12345`.
 
 ---
 
@@ -416,27 +429,35 @@ sbm transition run INC-12345 --id 155 --field OWNER=john.doe
 Discovers all valid values for a relational (list-type) field. Use this when you need to know what values are accepted by a `--field` argument.
 
 ```
-sbm field-values L3_SPECIALIST_GROUP --table 1000
-sbm field-values OWNER --table 1000
+sbm field-values ROOT_CAUSE --table 9999
+sbm field-values RETURN_REASON --table 1080
 ```
 
 | Argument/Flag | Meaning |
 |---|---|
 | `<field_name>` | The database name of the field |
-| `--table TABLE_ID` | Required; the SBM table ID that contains this field |
+| `--table TABLE_ID` | Required; the **relational source table ID** for this field — find it in `sbm get <ticket-id>` output as the `relTableId` property on the field. This is **not** the main ticket table ID. |
 | `--max-probe N` | Maximum number of item IDs to probe (default: 500) |
+
+**How to find the correct table ID:**
+
+```
+sbm get INC-12345
+```
+
+Look for the field in the JSON output. Its `relTableId` property is the value to pass to `--table`.
 
 **Output:**
 
 ```json
-[
-  {"id": 201, "value": "L3SupportWindows"},
-  {"id": 202, "value": "L3SupportNetwork"},
+{"ok": true, "command": "field-values", "data": {"field": "ROOT_CAUSE", "table_id": 9999, "values": [
+  {"id": 1673, "name": "Software bug"},
+  {"id": 2387, "name": "Configuration issue"},
   ...
-]
+]}}
 ```
 
-Use the `value` string (not the `id`) when passing `--field` arguments to `sbm transition`.
+Use the `id` (not the name) when passing `--field` arguments to `sbm transition` for relational fields.
 
 ---
 
@@ -463,7 +484,7 @@ Lists all team → ticket-manager mappings configured in your config file.
 
 ```
 sbm teams
-sbm teams --pretty
+sbm --pretty teams
 ```
 
 This command reads from the `[teams]` section of `config.toml` — it does not query SBM live. Use it to confirm team names are correctly configured before running automated assignment workflows.
@@ -579,4 +600,4 @@ After uninstalling, optionally clean up the remaining files:
 
 ---
 
-*End of manual — sbm-cli v0.3.1*
+*End of manual — sbm-cli v0.3.2*

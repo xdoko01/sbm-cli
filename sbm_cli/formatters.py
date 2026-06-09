@@ -54,13 +54,8 @@ def format_ticket(item: dict) -> str:
     iid = item.get("id", {})
     display_id = iid.get("itemIdPrefixed", str(iid.get("id", "")))
     lines = [f"Ticket: {display_id}"]
-    for dbname, fdata in item.get("fields", {}).items():
-        if not isinstance(fdata, dict):
-            continue
-        val = fdata.get("value")
-        if isinstance(val, dict):
-            val = val.get("name", str(val.get("id", "")))
-        lines.append(f"  {dbname}: {val if val is not None else ''}")
+    for dbname in item.get("fields", {}):
+        lines.append(f"  {dbname}: {_field_val(item, dbname)}")
     return "\n".join(lines)
 
 

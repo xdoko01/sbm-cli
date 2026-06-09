@@ -125,6 +125,9 @@ uv run pytest -m integration  # requires live SBM connection
 
 ## Changelog
 
+### 0.3.2
+- `sbm --pretty get` now renders relational fields (OWNER, SUBMITTER, CONTACT, etc.) correctly — they were always blank due to a formatter bug
+
 ### 0.3.1
 - `sbm --version` flag added
 - README: version changelog, updated config example with `optional_fields`

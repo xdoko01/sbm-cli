@@ -137,3 +137,34 @@ def test_format_ticket_list_relational_no_wrapper():
     }]
     output = formatters.format_ticket_list(items, columns=["TITLE", "URGENCY"])
     assert "3 - Medium" in output
+
+
+def test_format_ticket_relational_flat_form():
+    """format_ticket renders relational fields in flat {id, name} form (getitemsbyitemid endpoint)."""
+    item = {
+        "id": {"id": 14014991, "itemIdPrefixed": "02440941"},
+        "fields": {
+            "TITLE": {"value": "Morocco eCommerce failure"},
+            "STATE": {"value": "L3 Resolution"},
+            "OWNER": {"id": 316, "name": "Dokoupil, Otakar"},
+            "CONTACT": {"id": 0, "name": "(None)"},
+        },
+    }
+    output = formatters.format_ticket(item)
+    assert "02440941" in output
+    assert "Morocco eCommerce failure" in output
+    assert "Dokoupil, Otakar" in output
+    assert "OWNER: \n" not in output  # field must not be blank
+
+
+def test_format_ticket_relational_wrapped_form_still_works():
+    """format_ticket still works for the wrapped {"value": {id, name}} form."""
+    item = {
+        "id": {"id": 1, "itemIdPrefixed": "00001"},
+        "fields": {
+            "TITLE": {"value": "Wrapped ticket"},
+            "OWNER": {"value": {"id": 1, "name": "Smith, Alice"}},
+        },
+    }
+    output = formatters.format_ticket(item)
+    assert "Smith, Alice" in output

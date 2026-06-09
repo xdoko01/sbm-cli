@@ -11,3 +11,7 @@ htmlcov/
 .mypy_cache/
 .worktrees/
 docs/superpowers/
+docs/*.pdf
+.claude/
+.playwright-mcp/
+sbm-*.txt

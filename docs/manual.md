@@ -1,8 +1,8 @@
 # sbm-cli — Installation and Usage Manual
 
-**Version:** 0.3.2  
-**Date:** 2026-06-09  
-**Platform:** Windows 10 / Windows 11
+**Version:** 0.4.0  
+**Date:** 2026-06-12  
+**Platform:** Windows 10/11 · macOS 13+ · Linux (Ubuntu 22.04+)
 
 ---
 
@@ -12,10 +12,10 @@
 2. [Prerequisites & System Requirements](#2-prerequisites--system-requirements)
 3. [Installation](#3-installation)
 4. [First-Run Configuration](#4-first-run-configuration)
-5. [Secure Password Storage (Windows Credential Manager)](#5-secure-password-storage-windows-credential-manager)
+5. [Secure Password Storage](#5-secure-password-storage)
    - 5.1 [Why this matters](#51-why-this-matters)
    - 5.2 [What happens during configure setup](#52-what-happens-during-sbm-configure-setup)
-   - 5.3 [Verifying the stored credential](#53-verifying-the-stored-credential-gui)
+   - 5.3 [Platform-specific keyring details](#53-platform-specific-keyring-details)
    - 5.4 [Updating your password](#54-updating-your-password)
    - 5.5 [Removing the credential](#55-removing-the-credential)
    - 5.6 [Migration from a plaintext config](#56-migration-from-an-old-plaintext-config)
@@ -49,7 +49,7 @@ With sbm-cli you can:
 
 All operations output clean JSON by default, or formatted tables with the `--pretty` flag. This makes sbm-cli easy to use both interactively and in scripts.
 
-**Supported platform:** Windows 10 and Windows 11 only.
+**Supported platforms:** Windows 10/11, macOS 13 (Ventura) or newer, and Linux (Ubuntu 22.04+ or equivalent).
 
 ---
 
@@ -57,22 +57,39 @@ All operations output clean JSON by default, or formatted tables with the `--pre
 
 Before installing sbm-cli, confirm that the following are in place:
 
+**All platforms**
+
 | Requirement | Minimum | How to check |
 |---|---|---|
-| Operating system | Windows 10 or Windows 11 | *Settings → System → About* |
-| Python | 3.11 or newer | `python --version` |
+| Python | 3.11 or newer | `python --version` or `python3 --version` |
 | Network access | Reachable SBM server URL | Ask your SBM administrator |
 | Package installer | `uv` (recommended) or `pip` | `uv --version` or `pip --version` |
 
-**Installing uv** (if not already present):
+**Platform-specific**
 
-```
+| Platform | Requirement | Notes |
+|---|---|---|
+| Windows 10/11 | Built-in | Python available from python.org or Microsoft Store |
+| macOS 13+ | Homebrew Python recommended | `brew install python@3.11` |
+| Linux (Ubuntu 22.04+) | System Python or pyenv | `sudo apt install python3 python3-pip` |
+| Linux (desktop) | GNOME Keyring or KWallet | Required for persistent password storage; see Section 5.3 |
+| Linux (headless/server) | None | Password is prompted interactively on each run; see Section 5.3 |
+
+**Installing uv** (recommended, all platforms):
+
+*Windows (PowerShell):*
+```powershell
 pip install uv
+```
+
+*macOS / Linux (shell):*
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 Or follow the official guide: https://docs.astral.sh/uv/getting-started/installation/
 
-> **Note:** uv is the recommended way to install sbm-cli because it places the tool in an isolated environment, keeping it separate from any other Python projects on your machine.
+> **Note:** uv installs sbm-cli in an isolated environment, keeping it separate from any other Python projects on your machine.
 
 ---
 
@@ -94,10 +111,10 @@ pip install sbm-cli
 
 ### Installing from a wheel file (offline / no internet access)
 
-If you received a `.whl` file directly (for example, `sbm_cli-0.3.1-py3-none-any.whl`):
+If you received a `.whl` file directly (for example, `sbm_cli-0.4.0-py3-none-any.whl`):
 
 ```
-pip install sbm_cli-0.3.1-py3-none-any.whl
+pip install sbm_cli-0.4.0-py3-none-any.whl
 ```
 
 ### Verifying the installation
@@ -111,7 +128,7 @@ sbm --version
 Expected output:
 
 ```
-sbm, version 0.3.1
+sbm, version 0.4.0
 ```
 
 If the command is not found, close and reopen your terminal window and try again.
@@ -132,7 +149,7 @@ The wizard will prompt you for the following values:
 |---|---|---|
 | SBM host URL | `https://sbm.example.com` | Include `https://` — no trailing slash |
 | Username | `john.doe` | Your SBM login name (case-sensitive) |
-| Password | *(hidden)* | Typed but not echoed; stored in Windows Credential Manager — **never written to disk** |
+| Password | *(hidden)* | Typed but not echoed; stored in your system keyring — **never written to disk** |
 | Default table ID | `1000` | The SBM table your tickets live in; ask your admin if unsure |
 | Default report ID | `2208` | The saved report used by `sbm list`; ask your admin if unsure |
 | Verify SSL | `y` or `n` | Enter `n` if your SBM server uses a self-signed certificate |
@@ -144,6 +161,8 @@ After the wizard completes, your configuration file is written to:
 ```
 C:\Users\<you>\.sbm-cli\config.toml
 ```
+
+> **macOS / Linux:** The config file is at `~/.sbm-cli/config.toml`.
 
 Open it with any text editor to verify. It should look similar to this:
 
@@ -159,7 +178,7 @@ report_id   = 2208
 list_fields = ["TITLE", "STATE", "OWNER"]
 ```
 
-> **Important:** The config file contains no `password` field. Your password is stored separately in Windows Credential Manager. See [Section 5](#5-secure-password-storage-windows-credential-manager) for details.
+> **Important:** The config file contains no `password` field. Your password is stored separately in your system's secure keyring (see [Section 5](#5-secure-password-storage) for details).
 
 ### Testing the connection
 
@@ -173,10 +192,10 @@ If the connection succeeds you will see a table of your open tickets. If it fail
 
 ---
 
-## 5. Secure Password Storage (Windows Credential Manager)
+## 5. Secure Password Storage
 
 > **This is the most important security section of this manual.**  
-> Your password is never written to a file. It is always stored in Windows Credential Manager.
+> Your password is never written to a file. It is always stored in your operating system's secure keyring.
 
 ### 5.1 Why this matters
 
@@ -186,74 +205,109 @@ Storing a password in a plain-text config file (`config.toml`) means:
 - If you accidentally share the file (email, screen share, version control), the password is exposed
 - Backup tools may copy the file to cloud storage in plaintext
 
-**Windows Credential Manager** stores credentials in encrypted form, protected by your Windows login. Only your own user session can decrypt and read them. The password never appears in any file on disk.
+sbm-cli uses the **system keyring** — a secure, OS-managed credential store protected by your login session. The password never appears in any file on disk.
 
 ### 5.2 What happens during `sbm configure setup`
 
 When you type your password at the wizard prompt, sbm-cli performs these steps:
 
 1. Calls the `keyring` library with your password
-2. `keyring` stores the credential in Windows Credential Manager under the name `sbm-cli:<host>` (for example: `sbm-cli:https://sbm.example.com`)
+2. `keyring` stores the credential in your system keyring under the name `sbm-cli:<host>` (for example: `sbm-cli:https://sbm.example.com`)
 3. Saves `config.toml` **without** a `password =` field
-4. On every subsequent command, sbm-cli retrieves the password from Credential Manager at runtime — it is never cached in memory between commands
+4. On every subsequent command, sbm-cli retrieves the password from the keyring at runtime
 
-### 5.3 Verifying the stored credential (GUI)
+### 5.3 Platform-specific keyring details
 
-To confirm that your password has been stored correctly:
+**Windows — Credential Manager**
 
-1. Press **Win**, type **Credential Manager**, and press Enter
+Credentials are stored in Windows Credential Manager.
+
+To verify or remove a stored credential:
+1. Press **Win**, type **Credential Manager**, press Enter
 2. Click **Windows Credentials**
-3. Scroll through the list and look for an entry beginning with `sbm-cli:`  
-   (for example: `sbm-cli:https://sbm.example.com`)
-4. Click the entry to expand it — you should see your username listed
+3. Look for `sbm-cli:https://...`
 
-If the entry is present, sbm-cli will be able to authenticate. If it is missing, re-run `sbm configure setup`.
+To remove via PowerShell:
+```powershell
+cmdkey /delete:sbm-cli:https://sbm.example.com
+```
+
+**macOS — Keychain**
+
+Credentials are stored in the macOS Keychain (`login` keychain).
+
+To verify via GUI:
+1. Open **Keychain Access** (Applications → Utilities → Keychain Access)
+2. Search for `sbm-cli`
+3. You should see an entry for your SBM host
+
+To remove via Terminal:
+```bash
+security delete-generic-password -s "sbm-cli:https://sbm.example.com"
+```
+
+**Linux — GNOME Keyring / KWallet (desktop)**
+
+On desktop Linux with GNOME or KDE, credentials are stored via SecretService.
+
+Install GNOME Keyring if not already present:
+```bash
+sudo apt install gnome-keyring libsecret-tools   # Ubuntu/Debian
+sudo dnf install gnome-keyring libsecret         # Fedora
+```
+
+To remove a stored credential:
+```bash
+secret-tool clear service sbm-cli:https://sbm.example.com
+```
+
+**Linux — Headless / server (no keyring daemon)**
+
+On servers or CI systems without a desktop keyring daemon, sbm-cli cannot store credentials persistently. It handles this gracefully:
+
+- `sbm configure setup` will warn you that no keyring is available and continue
+- On every subsequent command, sbm-cli prompts interactively:
+  ```
+  Password:
+  ```
+- The password is used for that invocation only — it is never written to disk
 
 ### 5.4 Updating your password
 
-If your SBM password changes, run the setup wizard again:
+Re-run the setup wizard:
 
 ```
 sbm configure setup
 ```
 
-At each prompt you can press **Enter** to keep the existing value. When you reach the password prompt, type your new password. sbm-cli will overwrite the old entry in Credential Manager.
+When you reach the password prompt, type your new password. sbm-cli will overwrite the old entry in the keyring.
 
 ### 5.5 Removing the credential
 
-You may want to remove the stored credential when changing accounts, uninstalling the tool, or rotating credentials on a shared machine.
-
-**Via the GUI:**
-
-1. Open Credential Manager (see [Section 5.3](#53-verifying-the-stored-credential-gui))
-2. Click **Windows Credentials**
-3. Find the `sbm-cli:https://…` entry and click it to expand
-4. Click **Remove** and confirm
-
-**Via PowerShell (command line only):**
-
-Replace the URL with your actual SBM host:
-
-```powershell
-cmdkey /delete:sbm-cli:https://sbm.example.com
-```
+See the platform-specific instructions in [Section 5.3](#53-platform-specific-keyring-details) above.
 
 To also remove the config file:
 
+*Windows:*
 ```powershell
 Remove-Item "$env:USERPROFILE\.sbm-cli\config.toml"
 ```
 
+*macOS / Linux:*
+```bash
+rm ~/.sbm-cli/config.toml
+```
+
 ### 5.6 Migration from an old plaintext config
 
-Versions of sbm-cli older than 0.2.0 stored the password directly in `config.toml`. If you upgrade from such a version, sbm-cli automatically migrates your credential on the first run:
+Versions of sbm-cli older than 0.2.0 stored the password directly in `config.toml`. On the first run after upgrading, sbm-cli automatically migrates your credential:
 
 1. The password is read from the old `config.toml`
-2. It is stored in Windows Credential Manager
+2. It is stored in the system keyring
 3. `config.toml` is rewritten with the `password =` line removed
-4. A one-time message appears on the terminal: `Password migrated to Windows Credential Manager.`
+4. A one-time message appears: `Password migrated to <platform keyring name>.`
 
-No manual action is needed. After migration, your config file will no longer contain a password.
+On headless Linux without a keyring daemon, migration is skipped and a warning is printed. The plaintext password remains in `config.toml` until you run `sbm configure setup` in an environment with a keyring available.
 
 ---
 
@@ -276,10 +330,10 @@ These flags can be placed immediately after `sbm`, before any subcommand:
 ```
 sbm --pretty list
 sbm --indent get INC-12345
-sbm --config C:/alt/config.toml list
+sbm --config ~/alt/config.toml list
 ```
 
-> **Note:** Use forward slashes (`/`) or double backslashes (`\\`) in paths passed to `--config`; a single `\` is treated as an escape character by the shell.
+> **Note:** Use an absolute or home-relative path with `--config`.
 
 ---
 
@@ -390,8 +444,6 @@ sbm get INC-12345 --fields TITLE,STATE,DESCRIPTION,OWNER
 | `<ticket-id>` | The ticket display ID, for example `INC-12345` |
 | `--fields F1,F2` | Comma-separated list of field names to return (default: all) |
 
-> **Known limitation:** In `--pretty` mode, relational fields (OWNER, CONTACT, SUBMITTER, etc.) currently display blank. Use the default JSON output to see their values: `sbm get INC-12345`.
-
 ---
 
 ### `sbm transition <name> <ticket-id>`
@@ -400,8 +452,9 @@ Executes a named transition on a ticket. The transition must be defined in your 
 
 ```
 sbm transition assign INC-12345 --field OWNER=john.doe --field L3_SPECIALIST_GROUP=L3SupportWindows
-sbm transition close INC-12345 --field SOLUTION_STEPS="Resolved by rebooting the server."
-sbm transition return INC-12345
+sbm transition close INC-12345 --field RESOLUTION="Fixed" --field ROOT_CAUSE=1701
+sbm transition close INC-12345 --field RESOLUTION="Fixed" --field ROOT_CAUSE=1701 --field SOLUTION_STEPS="Root cause identified and resolved."
+sbm transition return-l2 INC-12345
 ```
 
 | Argument/Flag | Meaning |
@@ -493,7 +546,7 @@ This command reads from the `[teams]` section of `config.toml` — it does not q
 
 ## 7. Config File Reference
 
-Location: `C:\Users\<you>\.sbm-cli\config.toml`
+Location: `C:\Users\<you>\.sbm-cli\config.toml` (Windows) or `~/.sbm-cli/config.toml` (macOS / Linux)
 
 This file is created and maintained by `sbm configure setup` and `sbm configure transition`. You can also edit it directly in a text editor.
 
@@ -552,7 +605,7 @@ SOLUTION_STEPS = { type = "text", label = "Solution Steps" }
 
 | Rule | Detail |
 |---|---|
-| No `password =` field | Password is in Windows Credential Manager, not here |
+| No `password =` field | Password is in your system keyring, not here |
 | Field names are case-sensitive | Use the exact database name from `sbm fields` |
 | List-type fields need `field_types` | Without this, sbm-cli sends a text value instead of an array and the transition may fail |
 | Config keys must be alphanumeric | Transition names may contain letters, digits, `-`, and `_` only |
@@ -574,7 +627,7 @@ Verify the new version after upgrading:
 sbm --version
 ```
 
-Your `config.toml` and Credential Manager entries are not affected by upgrades.
+Your `config.toml` and keyring entries are not affected by upgrades.
 
 ### Uninstalling
 
@@ -586,18 +639,20 @@ pip uninstall sbm-cli          # if installed via pip
 After uninstalling, optionally clean up the remaining files:
 
 1. **Remove the config file:**
+
+   *Windows:*
    ```powershell
    Remove-Item "$env:USERPROFILE\.sbm-cli\config.toml"
    ```
 
-2. **Remove the stored password from Windows Credential Manager:**  
-   Open Credential Manager → Windows Credentials → find `sbm-cli:https://…` → click Remove  
-   
-   Or via PowerShell:
-   ```powershell
-   cmdkey /delete:sbm-cli:https://sbm.example.com
+   *macOS / Linux:*
+   ```bash
+   rm ~/.sbm-cli/config.toml
    ```
+
+2. **Remove the stored password from your system keyring:**  
+   See [Section 5.3](#53-platform-specific-keyring-details) for platform-specific instructions.
 
 ---
 
-*End of manual — sbm-cli v0.3.2*
+*End of manual — sbm-cli v0.4.0*

@@ -11,6 +11,7 @@
 1. [Introduction](#1-introduction)
 2. [Prerequisites & System Requirements](#2-prerequisites--system-requirements)
 3. [Installation](#3-installation)
+   - [If the `sbm` command is not found](#if-the-sbm-command-is-not-found)
 4. [First-Run Configuration](#4-first-run-configuration)
 5. [Secure Password Storage](#5-secure-password-storage)
    - 5.1 [Why this matters](#51-why-this-matters)
@@ -131,7 +132,54 @@ Expected output:
 sbm, version 0.4.0
 ```
 
-If the command is not found, close and reopen your terminal window and try again.
+If the command is not found after reopening your terminal, see [If the `sbm` command is not found](#if-the-sbm-command-is-not-found) below.
+
+### If the `sbm` command is not found
+
+When `sbm` is installed but your shell reports *"command not found"*, the tool's install directory is not yet in your `PATH`. Fix this with one command:
+
+**All platforms — recommended fix:**
+
+```
+uv tool update-shell
+```
+
+Close and reopen your terminal, then retry `sbm --version`. This works on Windows, macOS, and Linux.
+
+**macOS / Linux — manual PATH setup (if `uv tool update-shell` did not help):**
+
+```bash
+# zsh (default on macOS):
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# bash (common on Linux):
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Retry `sbm --version` after sourcing the profile.
+
+**Windows — manual PATH setup (if `uv tool update-shell` did not help):**
+
+1. Press **Win**, type **Environment Variables**, press Enter
+2. Under **User variables**, click **Path → Edit → New**
+3. Add: `%USERPROFILE%\.local\bin`
+4. Click **OK**, close and reopen your terminal
+
+**pip install on macOS / Linux (Option B):**
+
+`pip install --user` places the `sbm` script in `~/.local/bin` — the same directory. Use the bash/zsh steps above to add it to your PATH.
+
+**pip install on Windows (Option B):**
+
+The scripts directory depends on your Python version. Find it with:
+
+```powershell
+python -m site --user-scripts
+```
+
+Add the printed path to your User **Path** environment variable using the steps above.
 
 ---
 

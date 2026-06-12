@@ -41,9 +41,13 @@ def mock_session(mocker):
 
 @pytest.fixture(autouse=True)
 def mock_credentials(mocker):
-    """Patch keyring calls globally so tests never hit real Windows Credential Manager.
-    Tests that need to verify missing credentials can override get_password locally:
+    """Patch keyring calls globally so tests never hit the real system keyring.
+
+    Tests that need to verify missing credentials can override locally:
         mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    Tests that need to simulate NoKeyringAvailable can use:
+        mocker.patch("sbm_cli.credentials.get_password",
+                     side_effect=credentials.NoKeyringAvailable("no daemon"))
     """
     mocker.patch("sbm_cli.credentials.get_password", return_value="testpass")
     mocker.patch("sbm_cli.credentials.set_password")

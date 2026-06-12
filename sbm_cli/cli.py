@@ -31,10 +31,14 @@ class AppContext:
     @property
     def client(self) -> SBMClient:
         if self._client is None:
-            password = credentials.get_password(self.config.host, self.config.username)
-            if password is None:
+            try:
+                password = credentials.get_password(self.config.host, self.config.username)
+            except credentials.NoKeyringAvailable:
+                password = click.prompt("Password", hide_input=True)
+
+            if not password:
                 raise PermissionError(
-                    "No password found in Windows Credential Manager. "
+                    f"No password found in {credentials.platform_keyring_name()}. "
                     "Run 'sbm configure' to set up credentials."
                 )
             self._client = SBMClient(
@@ -158,7 +162,17 @@ def configure_setup(ctx: click.Context) -> None:
         list_fields=list_fields,
     )
     save_config(config)
-    credentials.set_password(host, username, password)
+    try:
+        credentials.set_password(host, username, password)
+        click.echo(
+            f"Password stored in {credentials.platform_keyring_name()}.", err=True
+        )
+    except credentials.NoKeyringAvailable:
+        click.echo(
+            "Warning: no keyring backend available — you will be prompted for "
+            "your password on each run.",
+            err=True,
+        )
     click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
 
     click.echo("Testing connection...", err=True)

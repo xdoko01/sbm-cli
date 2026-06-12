@@ -1038,3 +1038,68 @@ def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
             )
     assert result.exit_code == 0
     set_pw.assert_called_once_with("https://sbm.test", "user", "secretpass")
+
+
+# ---------------------------------------------------------------------------
+# cross-platform credentials
+# ---------------------------------------------------------------------------
+
+def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker):
+    """When get_password raises NoKeyringAvailable, client prompts for password."""
+    from sbm_cli.credentials import NoKeyringAvailable
+    mocker.patch(
+        "sbm_cli.credentials.get_password",
+        side_effect=NoKeyringAvailable("no keyring"),
+    )
+    mock_items = [
+        {"id": {"id": 1, "itemIdPrefixed": "0001"},
+         "fields": {"TITLE": {"value": "T1"}, "STATE": {"value": "Open"}}}
+    ]
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = mock_items
+            result = runner.invoke(
+                main, ["list"],
+                input="mypassword\n",  # interactive prompt response
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    _, kwargs = MockClient.call_args
+    assert kwargs.get("password") == "mypassword"
+
+
+def test_client_error_message_uses_platform_keyring_name(runner: CliRunner, mocker):
+    """When get_password returns None, error message includes platform keyring name."""
+    mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    mocker.patch(
+        "sbm_cli.credentials.platform_keyring_name",
+        return_value="macOS Keychain",
+    )
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient"):
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "auth_error"
+    assert "macOS Keychain" in data["error"]["message"]
+    assert "sbm configure" in data["error"]["message"]
+
+
+def test_configure_setup_warns_when_no_keyring(runner: CliRunner, mocker):
+    """configure setup warns but continues when set_password raises NoKeyringAvailable."""
+    from sbm_cli.credentials import NoKeyringAvailable
+    mocker.patch(
+        "sbm_cli.credentials.set_password",
+        side_effect=NoKeyringAvailable("no daemon"),
+    )
+    with patch("sbm_cli.cli.save_config"):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(
+                main,
+                ["configure", "setup"],
+                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    assert "no keyring backend" in result.output.lower()

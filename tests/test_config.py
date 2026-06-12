@@ -425,3 +425,33 @@ def test_save_and_reload_roundtrip_optional_fields(tmp_path):
     save_config(cfg, path)
     reloaded = load_config(path)
     assert reloaded.transitions["assign"].optional_fields == ["SOLUTION_STEPS"]
+
+
+def test_load_config_migration_skipped_when_no_keyring(tmp_path, mocker, capsys):
+    """When set_password raises NoKeyringAvailable, config is NOT rewritten and a warning is printed."""
+    from sbm_cli.credentials import NoKeyringAvailable
+    mocker.patch(
+        "sbm_cli.credentials.set_password",
+        side_effect=NoKeyringAvailable("no daemon"),
+    )
+    mock_save = mocker.patch("sbm_cli.config.save_config")
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("""\
+[connection]
+host     = "https://sbm.test"
+username = "user"
+password = "oldpass"
+verify_ssl = false
+
+[defaults]
+table_id  = 1000
+report_id = 0
+""", encoding="utf-8")
+    config = load_config(cfg_file)
+    captured = capsys.readouterr()
+    # save_config must NOT have been called (password stays in file)
+    mock_save.assert_not_called()
+    # A warning about keyring was printed to stderr
+    assert "keyring" in captured.err.lower()
+    # Config was still returned correctly
+    assert config.host == "https://sbm.test"

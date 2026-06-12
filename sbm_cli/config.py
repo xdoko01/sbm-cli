@@ -142,9 +142,18 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
 
     if raw_password:
         from sbm_cli import credentials
-        credentials.set_password(config.host, config.username, raw_password)
-        save_config(config, path)
-        print("Password migrated to Windows Credential Manager.", file=sys.stderr)
+        try:
+            credentials.set_password(config.host, config.username, raw_password)
+            save_config(config, path)
+            print(
+                f"Password migrated to {credentials.platform_keyring_name()}.",
+                file=sys.stderr,
+            )
+        except credentials.NoKeyringAvailable:
+            print(
+                "No keyring backend available — password left in config file.",
+                file=sys.stderr,
+            )
 
     return config
 

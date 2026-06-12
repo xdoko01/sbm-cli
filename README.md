@@ -27,8 +27,7 @@ sbm get 02440942     # get ticket details
 
 Config is stored at `~/.sbm-cli/config.toml`. Run `sbm configure setup` to create it interactively.
 
-The password is stored in **Windows Credential Manager** (never in the config file). If you have an
-existing config with a plaintext `password` field, it is migrated automatically on the next run.
+The password is stored in the **system keyring** — Windows Credential Manager, macOS Keychain, or GNOME Keyring/KWallet on Linux (never in the config file). On headless Linux without a keyring daemon, you are prompted for your password on each run. If you have an existing config with a plaintext `password` field, it is migrated automatically on the next run.
 
 Use `sbm configure transition <name>` to add or update a named transition interactively.
 Manual editing is still needed for teams (transition IDs are instance-specific):
@@ -124,6 +123,13 @@ uv run pytest -m integration  # requires live SBM connection
 ```
 
 ## Changelog
+
+### 0.4.0
+- Cross-platform support: Windows, macOS, and Linux (previously Windows-only)
+- Platform-aware credential storage messages (Windows Credential Manager / macOS Keychain / system keyring)
+- Interactive password prompt fallback on headless Linux (no keyring daemon required)
+- Safe config migration when no keyring is available — plaintext password preserved rather than silently lost
+- `pyproject.toml` classifier updated to `OS Independent`
 
 ### 0.3.2
 - `sbm --pretty get` now renders relational fields (OWNER, SUBMITTER, CONTACT, etc.) correctly — they were always blank due to a formatter bug

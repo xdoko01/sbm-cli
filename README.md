@@ -14,6 +14,8 @@ uv tool install sbm-cli
 pip install sbm-cli
 ```
 
+> **PATH issues?** If `python`, `uv`, or `sbm` are not found after installation, see the [PATH setup guide](docs/manual.md#installing-python) in the manual.
+
 ## Quick start
 
 ```bash

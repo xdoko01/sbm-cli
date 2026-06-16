@@ -10,6 +10,8 @@
 
 1. [Introduction](#1-introduction)
 2. [Prerequisites & System Requirements](#2-prerequisites--system-requirements)
+   - [Installing Python](#installing-python)
+   - [Installing uv](#installing-uv)
 3. [Installation](#3-installation)
    - [If the `sbm` command is not found](#if-the-sbm-command-is-not-found)
 4. [First-Run Configuration](#4-first-run-configuration)
@@ -76,21 +78,86 @@ Before installing sbm-cli, confirm that the following are in place:
 | Linux (desktop) | GNOME Keyring or KWallet | Required for persistent password storage; see Section 5.3 |
 | Linux (headless/server) | None | Password is prompted interactively on each run; see Section 5.3 |
 
-**Installing uv** (recommended, all platforms):
+### Installing Python
 
-*Windows (PowerShell):*
+**Windows:**
+
+Download from [python.org](https://python.org) and run the installer.
+
+> **Important:** On the first installer screen, check **"Add Python to PATH"** before clicking Install Now. If you missed this, re-run the installer, choose **Modify**, and enable **"Add Python to environment variables"**. Alternatively, install Python via the **Microsoft Store** — it adds Python to PATH automatically.
+
+Verify after installing: open a new terminal and run `python --version`.
+
+**macOS:**
+
+```bash
+brew install python@3.11
+```
+
+If `python3` is not found after installing, Homebrew may not be on your PATH yet:
+
+```bash
+# Apple Silicon (M1/M2/M3):
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# Intel Mac:
+echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
+Verify: `python3 --version`
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt install python3 python3-pip
+```
+
+Python lands on PATH automatically after this command. Verify: `python3 --version`
+
+---
+
+### Installing uv
+
+**Windows (PowerShell):**
+
 ```powershell
 pip install uv
 ```
 
-*macOS / Linux (shell):*
+Or use the standalone installer (does not require an existing Python):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+After installation, **close and reopen your terminal**. If `uv` is still not found, add `%USERPROFILE%\.local\bin` to your User Path environment variable (see [Windows manual PATH steps](#if-the-sbm-command-is-not-found) in Section 3).
+
+**macOS / Linux:**
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
+Reload your shell profile immediately after:
+
+```bash
+source ~/.zshrc    # zsh (default on macOS)
+source ~/.bashrc   # bash (common on Linux)
+```
+
+If `uv` is still not found, add `~/.local/bin` to your PATH manually:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc   # zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # bash
+source ~/.zshrc                                             # or source ~/.bashrc
+```
+
 Or follow the official guide: https://docs.astral.sh/uv/getting-started/installation/
 
-> **Note:** uv installs sbm-cli in an isolated environment, keeping it separate from any other Python projects on your machine.
+Verify: `uv --version`
+
+> **Note:** uv installs sbm-cli in an isolated environment, keeping it separate from any other Python projects on your machine. For `pip install` PATH issues, see [If the `sbm` command is not found](#if-the-sbm-command-is-not-found) in Section 3.
 
 ---
 

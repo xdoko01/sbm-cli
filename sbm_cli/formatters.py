@@ -64,7 +64,7 @@ def format_schema(schema: dict) -> str:
     lines = [
         f"Host:           {conn.get('host', '?')}",
         f"Default table:  {conn.get('table_id', '?')}",
-        f"Default report: {schema.get('defaults', {}).get('report_id', '?')}",
+        f"Default reports: {', '.join(str(r) for r in schema.get('defaults', {}).get('report_ids', [])) or '?'}",
         "",
         "Transitions:",
     ]

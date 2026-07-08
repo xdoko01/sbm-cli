@@ -56,6 +56,14 @@ def test_schema_outputs_json(runner: CliRunner):
     assert data["data"]["transitions"]["assign"]["id"] == 155
 
 
+def test_schema_reports_report_ids(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208, 2209]
+    result = _invoke(runner, ["schema"], config=cfg)
+    data = json.loads(result.stdout)
+    assert data["data"]["defaults"]["report_ids"] == [2208, 2209]
+
+
 def test_schema_pretty(runner: CliRunner):
     result = _invoke(runner, ["--pretty", "schema"])
     assert result.exit_code == 0

@@ -292,7 +292,7 @@ def schema(ctx: AppContext) -> None:
     cfg = ctx.config
     data = {
         "connection": {"host": cfg.host, "table_id": cfg.table_id},
-        "defaults": {"report_id": cfg.report_id},
+        "defaults": {"report_ids": cfg.report_ids},
         "transitions": {
             name: {
                 "id": t.id,

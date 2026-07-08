@@ -136,6 +136,13 @@ uv run pytest -m integration  # requires live SBM connection
 
 ## Changelog
 
+### 0.5.0
+- Multi-report support: `defaults.report_ids` is now a **list**; `sbm list` (with no `--report`) queries every configured report, merges the results, and de-duplicates tickets
+- `--report` is now **repeatable** (`sbm list --report 2208 --report 2209`) and overrides `report_ids` for that run
+- Best-effort listing: a failing report is skipped with a stderr warning; `sbm list` errors only when *every* report fails
+- `sbm configure setup` prompts for a comma-separated list of report IDs; `sbm schema` reports `report_ids`
+- Backward compatible: a legacy singular `report_id` is read as `[report_id]` and migrated to `report_ids` on next save
+
 ### 0.4.0
 - Cross-platform support: Windows, macOS, and Linux (previously Windows-only)
 - Platform-aware credential storage messages (Windows Credential Manager / macOS Keychain / system keyring)

@@ -1,7 +1,7 @@
 # sbm-cli — Installation and Usage Manual
 
-**Version:** 0.4.0  
-**Date:** 2026-06-12  
+**Version:** 0.5.0  
+**Date:** 2026-07-08  
 **Platform:** Windows 10/11 · macOS 13+ · Linux (Ubuntu 22.04+)
 
 ---
@@ -179,10 +179,10 @@ pip install sbm-cli
 
 ### Installing from a wheel file (offline / no internet access)
 
-If you received a `.whl` file directly (for example, `sbm_cli-0.4.0-py3-none-any.whl`):
+If you received a `.whl` file directly (for example, `sbm_cli-0.5.0-py3-none-any.whl`):
 
 ```
-pip install sbm_cli-0.4.0-py3-none-any.whl
+pip install sbm_cli-0.5.0-py3-none-any.whl
 ```
 
 ### Verifying the installation
@@ -196,7 +196,7 @@ sbm --version
 Expected output:
 
 ```
-sbm, version 0.4.0
+sbm, version 0.5.0
 ```
 
 If the command is not found after reopening your terminal, see [If the `sbm` command is not found](#if-the-sbm-command-is-not-found) below.
@@ -781,4 +781,4 @@ After uninstalling, optionally clean up the remaining files:
 
 ---
 
-*End of manual — sbm-cli v0.4.0*
+*End of manual — sbm-cli v0.5.0*

@@ -41,8 +41,8 @@ username   = "myuser"
 verify_ssl = false          # set true for trusted certs
 
 [defaults]
-table_id  = 1000
-report_id = 2208
+table_id   = 1000
+report_ids = [2208, 2209]   # one or more reports; sbm list merges and de-duplicates them
 list_fields = ["TITLE","STATE","FUNCTIONALITY","URGENCY"]  # optional; blank uses built-in default
 
 [transitions.assign]
@@ -76,6 +76,16 @@ my-team = { id = 155, name = "L3 My Team" }
 > **Transition IDs** are instance-specific. Find them by inspecting browser developer tools
 > while performing actions in the SBM web UI, or ask your SBM admin.
 
+> **Multiple reports.** `defaults.report_ids` is a list. `sbm list` (with no `--report`)
+> queries every configured report, merges the results, and drops duplicate tickets
+> (a ticket appearing in more than one report is listed once). If one report fails, the
+> others still return and a warning is printed to stderr; `sbm list` only errors when
+> *every* report fails. Override the config for a single run with a repeatable `--report`
+> flag: `sbm list --report 2208 --report 2209`.
+>
+> *Migration:* an older config with a single `report_id = 2208` is still read (treated as
+> `report_ids = [2208]`) and rewritten to `report_ids` the next time the config is saved.
+
 ## Commands
 
 | Command | Description |
@@ -83,7 +93,7 @@ my-team = { id = 155, name = "L3 My Team" }
 | `sbm configure setup` | Interactive setup wizard |
 | `sbm configure transition <name>` | Add/update a named transition interactively |
 | `sbm schema` | Machine-readable capabilities JSON |
-| `sbm list [--report N] [--filter N]` | List tickets |
+| `sbm list [--report N]... [--filter N]` | List tickets (--report is repeatable; merges + de-dups across reports) |
 | `sbm get <ticket-id>` | Get ticket by display ID |
 | `sbm fields <ticket-id> [--fields F1,F2]` | List field definitions (dbnames, types, labels) |
 | `sbm transition <name> <ticket-id> --field K=V` | Run named transition |

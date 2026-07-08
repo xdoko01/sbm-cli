@@ -266,7 +266,7 @@ The wizard will prompt you for the following values:
 | Username | `john.doe` | Your SBM login name (case-sensitive) |
 | Password | *(hidden)* | Typed but not echoed; stored in your system keyring — **never written to disk** |
 | Default table ID | `1000` | The SBM table your tickets live in; ask your admin if unsure |
-| Default report ID | `2208` | The saved report used by `sbm list`; ask your admin if unsure |
+| Default report IDs | `2208, 2209` | Comma-separated saved reports used by `sbm list` (blank for none); ask your admin if unsure |
 | Verify SSL | `y` or `n` | Enter `n` if your SBM server uses a self-signed certificate |
 | Default list fields | `TITLE,STATE,OWNER` | Comma-separated field names shown by `sbm list` |
 | Sample ticket ID | `INC-12345` | Optional; sbm-cli uses this ticket to auto-discover field definitions |
@@ -289,7 +289,7 @@ verify_ssl = false
 
 [defaults]
 table_id    = 1000
-report_id   = 2208
+report_ids  = [2208, 2209]
 list_fields = ["TITLE", "STATE", "OWNER"]
 ```
 
@@ -508,7 +508,7 @@ Use this command to discover what transitions are available and what fields they
 ```
 Host:           https://sbm.example.com
 Default table:  1000
-Default report: 2208
+Default reports: 2208, 2209
 
 Transitions:
   assign (id=155) — required: OWNER, L3_SPECIALIST_GROUP — optional: SOLUTION_STEPS
@@ -524,21 +524,32 @@ Teams:
 
 ### `sbm list`
 
-Lists tickets from the default report or a specified report/filter.
+Lists tickets from the configured reports (all of `report_ids`, merged and
+de-duplicated) or from a specific report/filter.
 
 ```
 sbm list
 sbm --pretty list
 sbm list --report 2210
+sbm list --report 2208 --report 2209   # query several reports in one run
 sbm list --filter "My Open Tickets"
 sbm list --fields TITLE,STATE,OWNER,FUNCTIONALITY
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--report N` | `report_id` from config | SBM saved report ID |
+| `--report N` | `report_ids` from config | SBM saved report ID; **repeatable** — pass it multiple times to query several reports. When given, it overrides `report_ids` for that run. |
 | `--filter N` | — | SBM filter ID or filter name |
 | `--fields F1,F2` | `list_fields` from config | Comma-separated field database names to include |
+
+When more than one report is queried, results are merged and any ticket that
+appears in more than one report is listed only once. If a report fails (bad ID,
+API error), `sbm list` prints a warning to stderr and continues with the
+remaining reports; it only reports an error when *every* report fails.
+
+> **Migration note:** a legacy config with a single `report_id = 2208` is still
+> read (treated as `report_ids = [2208]`) and rewritten to `report_ids` on the
+> next save.
 
 **Tip:** Use `sbm --pretty list` to get a readable table. Omit `--pretty` when piping to other tools or scripts.
 
@@ -675,7 +686,7 @@ verify_ssl = false                         # Set false for self-signed certs
 # ── Defaults ─────────────────────────────────────────────────────────────
 [defaults]
 table_id    = 1000                         # Default item table ID
-report_id   = 2208                         # Report used by `sbm list`
+report_ids  = [2208, 2209]                 # Reports used by `sbm list` (merged + de-duplicated)
 list_fields = ["TITLE", "STATE", "OWNER"]  # Fields shown by default in list output
 
 # ── Named transitions ─────────────────────────────────────────────────────

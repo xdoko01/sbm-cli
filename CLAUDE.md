@@ -43,9 +43,10 @@ Run `sbm schema` to see which transitions have `optional_fields` configured.
 
 ```bash
 sbm schema                               # capabilities, transitions, teams
-sbm list                                 # tickets from default report
+sbm list                                 # tickets from all configured reports (merged, de-duplicated)
 sbm --pretty list                        # human-readable table output
-sbm list --report 2208                   # specific report
+sbm list --report 2208                   # specific report (overrides config)
+sbm list --report 2208 --report 2209     # several reports (repeatable; overrides config)
 sbm list --filter 36                     # by filter ID
 sbm get 02440942                         # ticket detail by display ID
 sbm --pretty get 02440942               # human-readable ticket detail
@@ -78,6 +79,22 @@ list_fields = ["TITLE","STATE","OWNER","FUNCTIONALITY","URGENCY","COUNTRY_IM","R
 Or set during the wizard: `sbm configure setup` prompts for this.
 When absent or empty, the built-in default `TITLE,STATE,OWNER,SECONDARYOWNER,URGENCY,SEVERITY` is used.
 `--fields` always overrides this for a single invocation.
+
+## Default reports
+
+`defaults.report_ids` is a **list** of report IDs:
+
+```toml
+[defaults]
+report_ids = [2208, 2209]
+```
+
+`sbm list` (with no `--report`) queries every configured report, merges the
+results, and drops duplicate tickets. If one report fails it is skipped with a
+warning on stderr; `sbm list` errors only when every report fails. `--report`
+is repeatable and overrides `report_ids` for that run
+(`sbm list --report 2208 --report 2209`). A legacy singular `report_id = 2208`
+is still read (as `[2208]`) and migrated to `report_ids` on the next save.
 
 ## Output format
 

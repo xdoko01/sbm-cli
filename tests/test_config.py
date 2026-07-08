@@ -14,7 +14,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 2208
+report_ids = [2208]
 
 [transitions]
 assign    = { id = 155, fields = ["OWNER", "3RD_LEVEL_SPECIALIST"] }
@@ -41,7 +41,76 @@ def test_load_config_parses_connection(tmp_path):
     assert cfg.username == "user"
     assert cfg.verify_ssl is False
     assert cfg.table_id == 1000
-    assert cfg.report_id == 2208
+    assert cfg.report_ids == [2208]
+
+
+def test_load_config_parses_report_ids_list(tmp_path):
+    toml = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_ids = [2208, 2209, 2210]
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.report_ids == [2208, 2209, 2210]
+
+
+def test_load_config_migrates_legacy_report_id(tmp_path):
+    toml = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_id = 2208
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.report_ids == [2208]
+
+
+def test_load_config_legacy_report_id_zero_becomes_empty(tmp_path):
+    toml = """\
+[connection]
+host = "https://sbm.test"
+username = "u"
+verify_ssl = false
+
+[defaults]
+table_id = 1000
+report_id = 0
+"""
+    path = tmp_path / "config.toml"
+    path.write_text(toml, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.report_ids == []
+
+
+def test_save_config_round_trips_report_ids(tmp_path):
+    cfg = Config(host="https://sbm.test", username="u", verify_ssl=False,
+                 table_id=1000, report_ids=[2208, 2209])
+    path = tmp_path / "config.toml"
+    save_config(cfg, path)
+    loaded = load_config(path)
+    assert loaded.report_ids == [2208, 2209]
+
+
+def test_save_config_empty_report_ids_omits_key(tmp_path):
+    cfg = Config(host="https://sbm.test", username="u", verify_ssl=False,
+                 table_id=1000, report_ids=[])
+    path = tmp_path / "config.toml"
+    save_config(cfg, path)
+    content = path.read_text()
+    assert "report_id" not in content
 
 
 def test_load_config_parses_transitions(tmp_path):
@@ -84,7 +153,7 @@ def test_save_and_reload_roundtrip(tmp_path):
         username="myuser",
         verify_ssl=True,
         table_id=1000,
-        report_id=2208,
+        report_ids=[2208],
         transitions={
             "assign": TransitionConfig(id=155, fields=["OWNER"]),
             "close": TransitionConfig(
@@ -116,7 +185,7 @@ def test_save_and_reload_special_chars(tmp_path):
         username="domain\\user",
         verify_ssl=True,
         table_id=1000,
-        report_id=0,
+        report_ids=[],
     )
     save_config(cfg, cfg_file)
     reloaded = load_config(cfg_file)
@@ -130,7 +199,7 @@ def test_save_config_invalid_transition_name_raises(tmp_path):
         username="user",
         verify_ssl=True,
         table_id=1000,
-        report_id=0,
+        report_ids=[],
         transitions={"bad.name": TransitionConfig(id=1)},
     )
     with pytest.raises(ConfigError, match="Invalid key"):
@@ -144,7 +213,7 @@ def test_save_config_invalid_field_type_key_raises(tmp_path):
         username="user",
         verify_ssl=True,
         table_id=1000,
-        report_id=0,
+        report_ids=[],
         transitions={
             "assign": TransitionConfig(id=1, field_types={"bad key": "list"}),
         },
@@ -160,7 +229,7 @@ def test_pre_transition_optional_without_id_roundtrip(tmp_path):
         username="user",
         verify_ssl=True,
         table_id=1000,
-        report_id=0,
+        report_ids=[],
         transitions={
             "mytr": TransitionConfig(id=5, pre_transition_optional=True),
         },
@@ -181,7 +250,7 @@ verify_ssl = false
 
 [defaults]
 table_id = 1000
-report_id = 0
+report_ids = []
 
 [users]
 alice = { id = 316 }
@@ -200,7 +269,7 @@ def test_save_config_round_trips_users(tmp_path):
     from sbm_cli.config import UserConfig
     config = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
         users={
             "alice": UserConfig(id=316),
             "jaroslav.burget": UserConfig(id=15399),
@@ -223,7 +292,7 @@ verify_ssl = false
 
 [defaults]
 table_id = 1000
-report_id = 0
+report_ids = []
 
 [fields]
 TITLE = { type = "text", label = "Title" }
@@ -243,7 +312,7 @@ def test_save_config_round_trips_fields(tmp_path):
     from sbm_cli.config import FieldDef
     config = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
         fields={
             "TITLE": FieldDef(dbname="TITLE", type="text", label="Title"),
             "OWNER": FieldDef(dbname="OWNER", type="relational", label="Owner"),
@@ -267,7 +336,7 @@ verify_ssl = false
 
 [defaults]
 table_id = 1000
-report_id = 0
+report_ids = []
 list_fields = ["TITLE", "STATE", "FUNCTIONALITY", "URGENCY"]
 """
     path = tmp_path / "config.toml"
@@ -286,7 +355,7 @@ def test_load_config_no_list_fields_returns_empty_list(tmp_path):
 def test_save_config_round_trips_list_fields(tmp_path):
     cfg = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
         list_fields=["TITLE", "FUNCTIONALITY", "URGENCY"],
     )
     path = tmp_path / "config.toml"
@@ -298,7 +367,7 @@ def test_save_config_round_trips_list_fields(tmp_path):
 def test_save_config_empty_list_fields_omits_key(tmp_path):
     cfg = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
         list_fields=[],
     )
     path = tmp_path / "config.toml"
@@ -317,7 +386,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 0
+report_ids = []
 """
     path = tmp_path / "config.toml"
     path.write_text(toml_content, encoding="utf-8")
@@ -329,7 +398,7 @@ report_id = 0
 def test_save_config_does_not_write_password(tmp_path):
     config = Config(
         host="https://sbm.test", username="user",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
     )
     path = tmp_path / "config.toml"
     save_config(config, path)
@@ -349,7 +418,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 0
+report_ids = []
 """, encoding="utf-8")
     config = load_config(cfg_file)
     set_pw.assert_called_once_with("https://sbm.test", "user", "oldpass")
@@ -376,7 +445,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 0
+report_ids = []
 
 [transitions.assign]
 id              = 155
@@ -398,7 +467,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 0
+report_ids = []
 
 [transitions]
 assign = { id = 155, fields = ["OWNER"] }
@@ -412,7 +481,7 @@ assign = { id = 155, fields = ["OWNER"] }
 def test_save_and_reload_roundtrip_optional_fields(tmp_path):
     cfg = Config(
         host="https://sbm.test", username="user", verify_ssl=False,
-        table_id=1000, report_id=0,
+        table_id=1000, report_ids=[],
         transitions={
             "assign": TransitionConfig(
                 id=155,
@@ -445,7 +514,7 @@ verify_ssl = false
 
 [defaults]
 table_id  = 1000
-report_id = 0
+report_ids = []
 """, encoding="utf-8")
     config = load_config(cfg_file)
     captured = capsys.readouterr()

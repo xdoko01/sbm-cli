@@ -15,7 +15,7 @@ def sample_config():
         username="testuser",
         verify_ssl=False,
         table_id=1000,
-        report_id=2208,
+        report_ids=[2208],
         transitions={
             "assign": TransitionConfig(id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"]),
             "close": TransitionConfig(

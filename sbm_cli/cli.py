@@ -92,13 +92,13 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_id=0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_id=0), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
         return
 
     try:
@@ -345,16 +345,16 @@ _DEFAULT_LIST_FIELDS = ["TITLE", "STATE", "OWNER", "SECONDARYOWNER", "URGENCY", 
 
 
 @main.command("list")
-@click.option("--report", "report_id", default=None, type=int,
-              help="Report ID (overrides default)")
+@click.option("--report", "report_ids", multiple=True, type=int,
+              help="Report ID (repeatable; overrides configured report_ids)")
 @click.option("--filter", "filter_id", default=None,
               help="Filter ID or name")
 @click.option("--fields", default=None,
               help="Comma-separated field dbnames (default: TITLE,STATE,OWNER,SECONDARYOWNER,URGENCY,SEVERITY)")
 @pass_ctx
-def list_tickets(ctx: AppContext, report_id: int | None,
+def list_tickets(ctx: AppContext, report_ids: tuple[int, ...],
                  filter_id: str | None, fields: str | None) -> None:
-    """List tickets from a report or filter."""
+    """List tickets from one or more reports (merged, de-duplicated) or a filter."""
     field_list = (
         [f.strip() for f in fields.split(",") if f.strip()] if fields  # explicit --fields always wins
         else ctx.config.list_fields          # user's configured default
@@ -366,12 +366,32 @@ def list_tickets(ctx: AppContext, report_id: int | None,
         if filter_id is not None:
             items = ctx.client.list_items_by_filter(filter_id, fields=field_list)
         else:
-            rid = report_id or ctx.config.report_id
-            if not rid:
+            rids = list(report_ids) or ctx.config.report_ids
+            if not rids:
                 ctx.error("list", "config_error",
-                          "No report_id configured. Use --report or set defaults.report_id in config.",
+                          "No reports configured. Use --report or set "
+                          "defaults.report_ids in config.",
                           exit_code=2)
-            items = ctx.client.list_items_by_report(rid, fields=field_list)
+            seen: set = set()
+            failures: list[str] = []
+            for rid in rids:
+                try:
+                    got = ctx.client.list_items_by_report(rid, fields=field_list)
+                except SBMError as exc:
+                    failures.append(f"{rid}: {exc}")
+                    ctx.status(f"Warning: report {rid} failed: {exc}")
+                    continue
+                for it in got:
+                    key = it.get("id", {}).get("id")
+                    if key is None:
+                        items.append(it)
+                    elif key not in seen:
+                        seen.add(key)
+                        items.append(it)
+            if failures and len(failures) == len(rids):
+                ctx.error("list", "api_error",
+                          "All reports failed: " + "; ".join(failures),
+                          exit_code=1)
     except PermissionError as exc:
         ctx.error("list", "auth_error", str(exc), exit_code=2)
     except SBMError as exc:

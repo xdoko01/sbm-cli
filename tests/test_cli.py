@@ -167,7 +167,7 @@ def test_list_uses_default_report(runner: CliRunner):
         with patch("sbm_cli.cli.SBMClient") as MockClient:
             MockClient.return_value.list_items_by_report.return_value = []
             runner.invoke(main, ["list"], catch_exceptions=False)
-            # Just verify it was called with report_id=2208
+            # Just verify it was called with the configured report id 2208
             call_args = MockClient.return_value.list_items_by_report.call_args
             assert call_args[0][0] == 2208
 
@@ -830,7 +830,7 @@ def test_configure_with_field_discovery_stores_fields(runner: CliRunner):
         "testuser\n"            # username
         "testpass\n"            # password
         "1000\n"                # table_id
-        "0\n"                   # report_id
+        "\n"                    # report_ids (blank → none)
         "n\n"                   # verify_ssl (No)
         "\n"                    # list_fields (blank → use default)
         "02440942\n"            # sample ticket ID
@@ -938,7 +938,7 @@ def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
         "testuser\n"
         "testpass\n"
         "1000\n"
-        "0\n"
+        "\n"  # report_ids (blank → none)
         "n\n"
         "\n"  # list_fields (blank → use default)
         "\n"  # blank → skip field discovery
@@ -1072,14 +1072,27 @@ def test_configure_setup_saves_list_fields(runner: CliRunner):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                # host, username, password, table_id, report_id, verify_ssl,
+                # host, username, password, table_id, report_ids, verify_ssl,
                 # list_fields, sample_ticket
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\nTITLE,FUNCTIONALITY,URGENCY\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\nTITLE,FUNCTIONALITY,URGENCY\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code in (0, 2)  # 2 because auth fails, but save still happens
     saved_cfg = mock_save.call_args[0][0]
     assert saved_cfg.list_fields == ["TITLE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_configure_setup_saves_report_ids(runner: CliRunner):
+    with patch("sbm_cli.cli.save_config") as mock_save:
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = PermissionError("401")
+            runner.invoke(
+                main, ["configure", "setup"],
+                input="https://sbm.test\nuser\npass\n1000\n2208, 2209\nn\n\n\n",
+                catch_exceptions=False,
+            )
+    saved_cfg = mock_save.call_args[0][0]
+    assert saved_cfg.report_ids == [2208, 2209]
 
 
 def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
@@ -1090,7 +1103,7 @@ def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
             result = runner.invoke(
                 main,
                 ["configure"],
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert "SBM host" in result.output
@@ -1116,7 +1129,7 @@ def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\nsecretpass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code == 0
@@ -1181,7 +1194,7 @@ def test_configure_setup_warns_when_no_keyring(runner: CliRunner, mocker):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code == 0

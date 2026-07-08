@@ -137,7 +137,14 @@ def configure_setup(ctx: click.Context) -> None:
     username = click.prompt("Username (bare, no domain prefix)")
     password = click.prompt("Password", hide_input=True)
     table_id = click.prompt("Default table ID", default=1000, type=int)
-    report_id = click.prompt("Default report ID", default=0, type=int)
+    report_ids_input = click.prompt(
+        "Default report IDs (comma-separated, blank for none)", default=""
+    )
+    try:
+        report_ids = [int(r.strip()) for r in report_ids_input.split(",") if r.strip()]
+    except ValueError:
+        click.echo("Report IDs must be integers.", err=True)
+        sys.exit(2)
     verify_ssl = click.confirm("Verify SSL certificate?", default=False)
     if not verify_ssl:
         click.echo(
@@ -158,7 +165,7 @@ def configure_setup(ctx: click.Context) -> None:
 
     config = Config(
         host=host, username=username,
-        verify_ssl=verify_ssl, table_id=table_id, report_id=report_id,
+        verify_ssl=verify_ssl, table_id=table_id, report_ids=report_ids,
         list_fields=list_fields,
     )
     save_config(config)

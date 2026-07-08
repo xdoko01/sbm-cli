@@ -45,7 +45,7 @@ class Config:
     username: str
     verify_ssl: bool
     table_id: int
-    report_id: int
+    report_ids: list[int] = field(default_factory=list)
     transitions: dict[str, TransitionConfig] = field(default_factory=dict)
     teams: dict[str, TeamConfig] = field(default_factory=dict)
     users: dict[str, UserConfig] = field(default_factory=dict)
@@ -73,6 +73,12 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     raw_password = conn.pop("password", None)  # Detected for migration; not stored in Config
     defaults = data.get("defaults", {})
     list_fields: list[str] = defaults.get("list_fields", [])
+
+    report_ids = defaults.get("report_ids")
+    if report_ids is None:
+        legacy = defaults.get("report_id", 0)  # backward-compat: migrate on read
+        report_ids = [legacy] if legacy else []
+    report_ids = [int(r) for r in report_ids]
 
     missing = [k for k in ("host", "username") if not conn.get(k)]
     if missing:
@@ -132,7 +138,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         username=conn["username"],
         verify_ssl=conn.get("verify_ssl", True),
         table_id=defaults.get("table_id", 1000),
-        report_id=defaults.get("report_id", 0),
+        report_ids=report_ids,
         transitions=transitions,
         teams=teams,
         users=users,
@@ -182,8 +188,10 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
         "",
         "[defaults]",
         f"table_id  = {config.table_id}",
-        f"report_id = {config.report_id}",
     ]
+    if config.report_ids:
+        ids_str = ", ".join(str(r) for r in config.report_ids)
+        lines.append(f"report_ids = [{ids_str}]")
     if config.list_fields:
         fields_str = ", ".join(f'"{f}"' for f in config.list_fields)
         lines.append(f"list_fields = [{fields_str}]")

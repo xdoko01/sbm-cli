@@ -36,7 +36,7 @@ def test_format_ticket_contains_fields():
 def test_format_schema_contains_transitions():
     schema = {
         "connection": {"host": "https://sbm.test", "table_id": 1000},
-        "defaults": {"report_id": 2208},
+        "defaults": {"report_ids": [2208, 2209]},
         "transitions": {
             "assign": {"id": 155, "required_fields": ["OWNER"]},
         },

@@ -18,7 +18,7 @@ def _make_app_config() -> Config:
         username="user",
         verify_ssl=False,
         table_id=1000,
-        report_id=2208,
+        report_ids=[2208],
         transitions={
             "assign": TransitionConfig(id=155, fields=["OWNER", "3RD_LEVEL_SPECIALIST"]),
             "close": TransitionConfig(
@@ -54,6 +54,14 @@ def test_schema_outputs_json(runner: CliRunner):
     assert data["command"] == "schema"
     assert "assign" in data["data"]["transitions"]
     assert data["data"]["transitions"]["assign"]["id"] == 155
+
+
+def test_schema_reports_report_ids(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208, 2209]
+    result = _invoke(runner, ["schema"], config=cfg)
+    data = json.loads(result.stdout)
+    assert data["data"]["defaults"]["report_ids"] == [2208, 2209]
 
 
 def test_schema_pretty(runner: CliRunner):
@@ -159,7 +167,7 @@ def test_list_uses_default_report(runner: CliRunner):
         with patch("sbm_cli.cli.SBMClient") as MockClient:
             MockClient.return_value.list_items_by_report.return_value = []
             runner.invoke(main, ["list"], catch_exceptions=False)
-            # Just verify it was called with report_id=2208
+            # Just verify it was called with the configured report id 2208
             call_args = MockClient.return_value.list_items_by_report.call_args
             assert call_args[0][0] == 2208
 
@@ -202,6 +210,81 @@ def test_list_auth_error(runner: CliRunner):
     assert result.exit_code == 2
     data = json.loads(result.stdout)
     assert data["error"]["type"] == "auth_error"
+
+
+def test_list_merges_and_dedups_multiple_reports(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208, 2209]
+
+    def by_report(rid, fields=None, **kw):
+        if rid == 2208:
+            return [{"id": {"id": 1}}, {"id": {"id": 2}}]
+        return [{"id": {"id": 2}}, {"id": {"id": 3}}]
+
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.side_effect = by_report
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    ids = [i["id"]["id"] for i in data["data"]]
+    assert ids == [1, 2, 3]
+
+
+def test_list_multiple_report_flags_override_config(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208]
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            runner.invoke(main, ["list", "--report", "10", "--report", "20"],
+                          catch_exceptions=False)
+            called = [c[0][0] for c in
+                      MockClient.return_value.list_items_by_report.call_args_list]
+    assert called == [10, 20]
+
+
+def test_list_best_effort_skips_failing_report(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208, 2209]
+
+    def by_report(rid, fields=None, **kw):
+        if rid == 2209:
+            raise SBMError("bad report")
+        return [{"id": {"id": 1}}]
+
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.side_effect = by_report
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert [i["id"]["id"] for i in data["data"]] == [1]
+    assert "Warning" in result.output and "2209" in result.output
+
+
+def test_list_all_reports_fail_returns_api_error(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = [2208, 2209]
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.side_effect = SBMError("nope")
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "api_error"
+
+
+def test_list_no_reports_configured_returns_config_error(runner: CliRunner):
+    cfg = _make_app_config()
+    cfg.report_ids = []
+    with patch("sbm_cli.cli.load_config", return_value=cfg):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "config_error"
 
 
 # ---------------------------------------------------------------------------
@@ -747,7 +830,7 @@ def test_configure_with_field_discovery_stores_fields(runner: CliRunner):
         "testuser\n"            # username
         "testpass\n"            # password
         "1000\n"                # table_id
-        "0\n"                   # report_id
+        "\n"                    # report_ids (blank → none)
         "n\n"                   # verify_ssl (No)
         "\n"                    # list_fields (blank → use default)
         "02440942\n"            # sample ticket ID
@@ -855,7 +938,7 @@ def test_configure_skips_field_discovery_when_no_sample_id(runner: CliRunner):
         "testuser\n"
         "testpass\n"
         "1000\n"
-        "0\n"
+        "\n"  # report_ids (blank → none)
         "n\n"
         "\n"  # list_fields (blank → use default)
         "\n"  # blank → skip field discovery
@@ -892,7 +975,7 @@ def test_configure_transition_adds_named_transition(runner: CliRunner):
     """configure transition writes a new transition into the loaded config."""
     initial_cfg = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=2208,
+        verify_ssl=False, table_id=1000, report_ids=[2208],
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
         with patch("sbm_cli.cli.save_config") as mock_save:
@@ -916,7 +999,7 @@ def test_configure_transition_with_pre_transition(runner: CliRunner):
     """configure transition saves pre_transition_id and pre_transition_optional."""
     initial_cfg = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
         with patch("sbm_cli.cli.save_config") as mock_save:
@@ -968,7 +1051,7 @@ def test_configure_transition_save_config_error_exits_2(runner: CliRunner):
     from sbm_cli.config import ConfigError
     initial_cfg = Config(
         host="https://sbm.test", username="u",
-        verify_ssl=False, table_id=1000, report_id=0,
+        verify_ssl=False, table_id=1000, report_ids=[],
     )
     with patch("sbm_cli.cli.load_config", return_value=initial_cfg):
         with patch("sbm_cli.cli.save_config", side_effect=ConfigError("invalid key")):
@@ -989,14 +1072,27 @@ def test_configure_setup_saves_list_fields(runner: CliRunner):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                # host, username, password, table_id, report_id, verify_ssl,
+                # host, username, password, table_id, report_ids, verify_ssl,
                 # list_fields, sample_ticket
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\nTITLE,FUNCTIONALITY,URGENCY\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\nTITLE,FUNCTIONALITY,URGENCY\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code in (0, 2)  # 2 because auth fails, but save still happens
     saved_cfg = mock_save.call_args[0][0]
     assert saved_cfg.list_fields == ["TITLE", "FUNCTIONALITY", "URGENCY"]
+
+
+def test_configure_setup_saves_report_ids(runner: CliRunner):
+    with patch("sbm_cli.cli.save_config") as mock_save:
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = PermissionError("401")
+            runner.invoke(
+                main, ["configure", "setup"],
+                input="https://sbm.test\nuser\npass\n1000\n2208, 2209\nn\n\n\n",
+                catch_exceptions=False,
+            )
+    saved_cfg = mock_save.call_args[0][0]
+    assert saved_cfg.report_ids == [2208, 2209]
 
 
 def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
@@ -1007,7 +1103,7 @@ def test_configure_no_subcommand_runs_setup_wizard(runner: CliRunner):
             result = runner.invoke(
                 main,
                 ["configure"],
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert "SBM host" in result.output
@@ -1033,7 +1129,7 @@ def test_configure_setup_stores_password_in_keyring(runner: CliRunner, mocker):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                input="https://sbm.test\nuser\nsecretpass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\nsecretpass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code == 0
@@ -1098,7 +1194,7 @@ def test_configure_setup_warns_when_no_keyring(runner: CliRunner, mocker):
             result = runner.invoke(
                 main,
                 ["configure", "setup"],
-                input="https://sbm.test\nuser\npass\n1000\n0\nn\n\n\n",
+                input="https://sbm.test\nuser\npass\n1000\n\nn\n\n\n",
                 catch_exceptions=False,
             )
     assert result.exit_code == 0

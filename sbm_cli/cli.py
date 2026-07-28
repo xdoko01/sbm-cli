@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import click
@@ -12,7 +13,7 @@ import requests
 from sbm_cli.client import SBMClient, SBMError
 from sbm_cli.config import (
     Config, ConfigError, FieldDef, TransitionConfig, UserConfig,
-    load_config, save_config, dump_config, DEFAULT_CONFIG_PATH,
+    load_config, save_config, dump_config, strip_password, DEFAULT_CONFIG_PATH,
 )
 from sbm_cli import credentials, formatters
 
@@ -323,6 +324,64 @@ def configure_export(ctx: AppContext) -> None:
     except ConfigError as exc:
         ctx.error("configure export", "config_error", str(exc), exit_code=2)
     click.echo(dump_config(config), nl=False)  # dump_config already ends in a newline
+
+
+@configure.command("import")
+@click.argument("source", default="-")
+@click.option("--force", is_flag=True, help="Overwrite an existing config file")
+@pass_ctx
+def configure_import(ctx: AppContext, source: str, force: bool) -> None:
+    """Install a config from PATH, or from stdin when PATH is '-' (the default).
+
+    Validates before installing, so a malformed import never touches an
+    existing config. Does not contact the SBM host — run 'sbm auth check'
+    for that.
+    """
+    target = ctx.config_path
+    if target.exists() and not force:
+        ctx.error("configure import", "config_error",
+                  f"{target} already exists. Pass --force to overwrite.",
+                  exit_code=2)
+
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+    except OSError as exc:
+        ctx.error("configure import", "config_error",
+                  f"Cannot read {source}: {exc}", exit_code=2)
+
+    # Strip before validating: load_config would otherwise migrate a plaintext
+    # password into the keyring and rewrite the temp file.
+    try:
+        text, removed = strip_password(text)
+    except ConfigError as exc:
+        ctx.error("configure import", "validation_error", str(exc), exit_code=3)
+    if removed:
+        ctx.status("Warning: plaintext password removed from the imported config — "
+                   "set SBM_CLI_PASSWORD or run 'sbm configure setup'.")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=".sbm-import-", suffix=".toml")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        config = load_config(tmp)      # validation: TOML syntax + required keys
+    except ConfigError as exc:
+        tmp.unlink(missing_ok=True)
+        ctx.error("configure import", "validation_error", str(exc), exit_code=3)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, target)
+
+    ctx.output("configure import", {
+        "path": str(target),
+        "transitions": len(config.transitions),
+        "teams": len(config.teams),
+        "users": len(config.users),
+        "fields": len(config.fields),
+        "report_ids": config.report_ids,
+    })
 
 
 # ---------------------------------------------------------------------------

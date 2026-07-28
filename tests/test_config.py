@@ -558,3 +558,45 @@ def test_dump_config_contains_no_password_key(sample_config):
     """Config has no password field, so exported TOML structurally cannot leak one."""
     from sbm_cli.config import dump_config
     assert "password" not in dump_config(sample_config).lower()
+
+
+# ---------------------------------------------------------------------------
+# strip_password
+# ---------------------------------------------------------------------------
+
+def test_strip_password_removes_plaintext_key():
+    from sbm_cli.config import strip_password
+    text = (
+        '[connection]\n'
+        'host = "https://sbm.test"\n'
+        'username = "alice"\n'
+        'password = "secret"\n'
+        'verify_ssl = false\n'
+    )
+    cleaned, removed = strip_password(text)
+    assert removed is True
+    assert "secret" not in cleaned
+    assert 'username = "alice"' in cleaned
+    assert 'verify_ssl = false' in cleaned
+
+
+def test_strip_password_noop_when_absent():
+    from sbm_cli.config import strip_password
+    text = '[connection]\nhost = "https://sbm.test"\nusername = "alice"\n'
+    cleaned, removed = strip_password(text)
+    assert removed is False
+    assert cleaned == text
+
+
+def test_strip_password_rejects_invalid_toml():
+    from sbm_cli.config import strip_password
+    with pytest.raises(ConfigError):
+        strip_password("[connection\nhost =")
+
+
+def test_strip_password_refuses_inline_table_password():
+    """A password the line-based strip cannot reach must be an error, not a silent pass."""
+    from sbm_cli.config import strip_password
+    text = 'connection = { host = "h", username = "u", password = "p" }\n'
+    with pytest.raises(ConfigError, match="password"):
+        strip_password(text)

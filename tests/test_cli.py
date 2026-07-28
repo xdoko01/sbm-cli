@@ -1166,6 +1166,109 @@ def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker)
     assert kwargs.get("password") == "mypassword"
 
 
+def _valid_config_toml() -> str:
+    from sbm_cli.config import dump_config
+    return dump_config(_make_app_config())
+
+
+def test_configure_import_writes_config(runner: CliRunner, tmp_path, monkeypatch):
+    from sbm_cli.config import load_config
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-"],
+                           input=_valid_config_toml(), catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+    assert data["data"]["path"] == str(target)
+    assert data["data"]["transitions"] == 4
+    assert data["data"]["teams"] == 1
+    assert data["data"]["report_ids"] == [2208]
+    assert load_config(target).transitions["assign"].id == 155
+
+
+def test_configure_import_from_file(runner: CliRunner, tmp_path, monkeypatch):
+    source = tmp_path / "incoming.toml"
+    source.write_text(_valid_config_toml(), encoding="utf-8")
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", str(source)],
+                           catch_exceptions=False)
+    assert result.exit_code == 0
+    assert target.exists()
+
+
+def test_configure_import_refuses_overwrite_without_force(runner: CliRunner, tmp_path,
+                                                          monkeypatch):
+    target = tmp_path / "sbm.toml"
+    target.write_text("original", encoding="utf-8")
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-"],
+                           input=_valid_config_toml(), catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "config_error"
+    assert "--force" in data["error"]["message"]
+    assert target.read_text(encoding="utf-8") == "original"
+
+
+def test_configure_import_force_overwrites(runner: CliRunner, tmp_path, monkeypatch):
+    target = tmp_path / "sbm.toml"
+    target.write_text("original", encoding="utf-8")
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-", "--force"],
+                           input=_valid_config_toml(), catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "[connection]" in target.read_text(encoding="utf-8")
+
+
+def test_configure_import_malformed_leaves_existing_config_intact(runner: CliRunner,
+                                                                  tmp_path, monkeypatch):
+    target = tmp_path / "sbm.toml"
+    original = _valid_config_toml()
+    target.write_text(original, encoding="utf-8")
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-", "--force"],
+                           input="[connection\nthis is not toml",
+                           catch_exceptions=False)
+    assert result.exit_code == 3
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "validation_error"
+    assert target.read_text(encoding="utf-8") == original
+    assert list(tmp_path.iterdir()) == [target]  # no temp file left behind
+
+
+def test_configure_import_missing_required_keys_is_validation_error(runner: CliRunner,
+                                                                    tmp_path, monkeypatch):
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-"],
+                           input='[defaults]\ntable_id = 1000\n',
+                           catch_exceptions=False)
+    assert result.exit_code == 3
+    assert json.loads(result.stdout)["error"]["type"] == "validation_error"
+    assert not target.exists()
+
+
+def test_configure_import_strips_plaintext_password(runner: CliRunner, tmp_path,
+                                                     monkeypatch):
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    incoming = (
+        '[connection]\n'
+        'host = "https://sbm.test"\n'
+        'username = "alice"\n'
+        'password = "leaked"\n'
+        'verify_ssl = false\n'
+        '\n[defaults]\ntable_id = 1000\n'
+    )
+    result = runner.invoke(main, ["configure", "import", "-"], input=incoming,
+                           catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "leaked" not in target.read_text(encoding="utf-8")
+    assert "plaintext password" in result.stderr.lower()
+
+
 def test_configure_export_prints_raw_toml(runner: CliRunner, tmp_path, monkeypatch):
     from sbm_cli.config import save_config, load_config
     target = tmp_path / "sbm.toml"

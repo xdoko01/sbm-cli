@@ -344,7 +344,10 @@ def configure_import(ctx: AppContext, source: str, force: bool) -> None:
                   exit_code=2)
 
     try:
-        text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+        # utf-8-sig / lstrip: a UTF-8 BOM is common on Windows (Notepad,
+        # PowerShell's `Out-File -Encoding utf8`) and tomllib rejects one.
+        text = (sys.stdin.read().lstrip("﻿") if source == "-"
+                else Path(source).read_text(encoding="utf-8-sig"))
     except OSError as exc:
         ctx.error("configure import", "config_error",
                   f"Cannot read {source}: {exc}", exit_code=2)
@@ -382,6 +385,46 @@ def configure_import(ctx: AppContext, source: str, force: bool) -> None:
         "fields": len(config.fields),
         "report_ids": config.report_ids,
     })
+
+
+# ---------------------------------------------------------------------------
+# auth
+# ---------------------------------------------------------------------------
+
+@main.group()
+def auth() -> None:
+    """Credential commands."""
+
+
+@auth.command("check")
+@pass_ctx
+def auth_check(ctx: AppContext) -> None:
+    """Verify that the resolved credentials authenticate against the SBM host.
+
+    Reports which source the password came from, never the password itself.
+    Useful as a one-shot smoke test after 'sbm configure import' on a
+    headless machine.
+    """
+    try:
+        ctx.client.check_auth()
+    except PermissionError as exc:      # includes credentials.PasswordUnavailable
+        ctx.error("auth check", "auth_error", str(exc), exit_code=2)
+    except SBMError as exc:
+        ctx.error("auth check", "api_error", str(exc), exit_code=1)
+    except requests.exceptions.RequestException as exc:
+        ctx.error("auth check", "api_error",
+                  f"Could not reach {ctx.config.host}: {exc}", exit_code=1)
+
+    if ctx.pretty:
+        click.echo(f"Authenticated as {ctx.config.username} at {ctx.config.host}")
+        click.echo(f"Password source: {ctx.password_source}")
+    else:
+        ctx.output("auth check", {
+            "host": ctx.config.host,
+            "username": ctx.config.username,
+            "password_source": ctx.password_source,
+            "authenticated": True,
+        })
 
 
 # ---------------------------------------------------------------------------

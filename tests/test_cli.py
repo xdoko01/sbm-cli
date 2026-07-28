@@ -1198,6 +1198,32 @@ def test_configure_import_from_file(runner: CliRunner, tmp_path, monkeypatch):
     assert target.exists()
 
 
+def test_configure_import_accepts_utf8_bom_from_file(runner: CliRunner, tmp_path,
+                                                      monkeypatch):
+    """PowerShell's `Out-File -Encoding utf8` writes a BOM; tomllib rejects one."""
+    source = tmp_path / "incoming.toml"
+    source.write_text(_valid_config_toml(), encoding="utf-8-sig")
+    assert source.read_bytes().startswith(b"\xef\xbb\xbf")
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", str(source)],
+                           catch_exceptions=False)
+    assert result.exit_code == 0
+    # The installed config must be BOM-free so load_config can read it back.
+    assert not target.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_configure_import_accepts_utf8_bom_from_stdin(runner: CliRunner, tmp_path,
+                                                       monkeypatch):
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "import", "-"],
+                           input="﻿" + _valid_config_toml(),
+                           catch_exceptions=False)
+    assert result.exit_code == 0
+    assert not target.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
 def test_configure_import_refuses_overwrite_without_force(runner: CliRunner, tmp_path,
                                                           monkeypatch):
     target = tmp_path / "sbm.toml"
@@ -1366,6 +1392,77 @@ def test_client_no_password_no_tty_exits_2_without_hanging(runner: CliRunner, mo
     assert data["ok"] is False
     assert data["error"]["type"] == "auth_error"
     assert "SBM_CLI_PASSWORD" in data["error"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# auth check
+# ---------------------------------------------------------------------------
+
+def test_auth_check_reports_env_source(runner: CliRunner, monkeypatch):
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "envsecret")
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(main, ["auth", "check"], catch_exceptions=False)
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+    assert data["command"] == "auth check"
+    assert data["data"]["authenticated"] is True
+    assert data["data"]["password_source"] == "env:SBM_CLI_PASSWORD"
+    assert data["data"]["host"] == "https://sbm.test"
+    assert data["data"]["username"] == "user"
+    assert "envsecret" not in result.stdout
+
+
+def test_auth_check_reports_keyring_source(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(main, ["auth", "check"], catch_exceptions=False)
+    assert json.loads(result.stdout)["data"]["password_source"] == "keyring"
+
+
+def test_auth_check_401_exits_2(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = PermissionError(
+                "401 Unauthorized")
+            result = runner.invoke(main, ["auth", "check"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "auth_error"
+
+
+def test_auth_check_no_password_exits_2(runner: CliRunner, mocker):
+    from sbm_cli.credentials import NoKeyringAvailable
+    mocker.patch("sbm_cli.credentials.get_password",
+                 side_effect=NoKeyringAvailable("no daemon"))
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=False)
+    result = _invoke(runner, ["auth", "check"])
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["error"]["type"] == "auth_error"
+
+
+def test_auth_check_network_failure_exits_1(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.side_effect = SBMError("boom")
+            result = runner.invoke(main, ["auth", "check"], catch_exceptions=False)
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["error"]["type"] == "api_error"
+
+
+def test_auth_check_pretty(runner: CliRunner):
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.check_auth.return_value = None
+            result = runner.invoke(main, ["--pretty", "auth", "check"],
+                                   catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "https://sbm.test" in result.output
+    assert '{"ok"' not in result.output
 
 
 def test_client_error_message_uses_platform_keyring_name(runner: CliRunner, mocker):

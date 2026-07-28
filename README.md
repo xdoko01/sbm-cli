@@ -136,6 +136,14 @@ uv run pytest -m integration  # requires live SBM connection
 
 ## Changelog
 
+### 0.6.0
+- Headless / non-interactive support: `SBM_CLI_PASSWORD` is checked before the system keyring, so CI runners, containers and AI agents need no keyring daemon and no piping tricks. The password is never written to disk
+- `SBM_CLI_CONFIG` sets the config file path without repeating `--config` on every call (precedence: `--config` > `SBM_CLI_CONFIG` > `~/.sbm-cli/config.toml`)
+- `sbm configure export` prints the full config as raw TOML on stdout (never includes a password); `sbm configure import [PATH|-]` validates and installs it, refusing to overwrite without `--force` and tolerating a UTF-8 BOM
+- `sbm auth check` verifies credentials against the host and reports which source the password came from
+- The interactive password prompt is now gated on stdin being a terminal — on redirected stdin it used to block forever, and now exits 2 with a message naming `SBM_CLI_PASSWORD`
+- Fixed: `sbm configure transition` wrote to `~/.sbm-cli/config.toml` unconditionally, ignoring `--config`
+
 ### 0.5.0
 - Multi-report support: `defaults.report_ids` is now a **list**; `sbm list` (with no `--report`) queries every configured report, merges the results, and de-duplicates tickets
 - `--report` is now **repeatable** (`sbm list --report 2208 --report 2209`) and overrides `report_ids` for that run

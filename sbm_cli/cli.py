@@ -142,7 +142,7 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 @main.group(invoke_without_command=True)
 @click.pass_context
 def configure(ctx: click.Context) -> None:
-    """Interactive setup commands — writes ~/.sbm-cli/config.toml.
+    """Setup commands — write the config file (see --config / SBM_CLI_CONFIG).
 
     With no subcommand, runs the full setup wizard (same as 'configure setup').
     """

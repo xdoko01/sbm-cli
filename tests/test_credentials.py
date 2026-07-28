@@ -4,6 +4,7 @@ import keyring.errors
 from sbm_cli.credentials import (
     service_name, get_password, set_password, delete_password,
     platform_keyring_name, NoKeyringAvailable,
+    resolve_password, PasswordUnavailable, PASSWORD_ENV_VAR, _stdin_is_tty,
 )
 
 # Note: the autouse mock_credentials fixture in conftest.py patches
@@ -82,3 +83,88 @@ def test_delete_password_raises_no_keyring_available(mocker):
     )
     with pytest.raises(NoKeyringAvailable):
         delete_password("https://sbm.test", "alice")
+
+
+# ---------------------------------------------------------------------------
+# resolve_password
+# ---------------------------------------------------------------------------
+
+def test_password_env_var_name():
+    assert PASSWORD_ENV_VAR == "SBM_CLI_PASSWORD"
+
+
+def test_resolve_password_prefers_env_var(mocker, monkeypatch):
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "fromenv")
+    mock_get = mocker.patch("sbm_cli.credentials.get_password", return_value="fromkeyring")
+    password, source = resolve_password("https://sbm.test", "alice")
+    assert password == "fromenv"
+    assert source == "env:SBM_CLI_PASSWORD"
+    mock_get.assert_not_called()
+
+
+def test_resolve_password_env_var_not_stripped(monkeypatch, mocker):
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "  pad ded  ")
+    mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    password, _ = resolve_password("https://sbm.test", "alice")
+    assert password == "  pad ded  "
+
+
+def test_resolve_password_empty_env_var_falls_through_to_keyring(monkeypatch, mocker):
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "")
+    mocker.patch("sbm_cli.credentials.get_password", return_value="fromkeyring")
+    password, source = resolve_password("https://sbm.test", "alice")
+    assert password == "fromkeyring"
+    assert source == "keyring"
+
+
+def test_resolve_password_uses_keyring(mocker):
+    mocker.patch("sbm_cli.credentials.get_password", return_value="stored")
+    assert resolve_password("https://sbm.test", "alice") == ("stored", "keyring")
+
+
+def test_resolve_password_raises_when_keyring_empty(mocker):
+    """Reachable keyring with no entry must NOT prompt — preserves today's behaviour."""
+    mocker.patch("sbm_cli.credentials.get_password", return_value=None)
+    mock_prompt = mocker.patch("sbm_cli.credentials.click.prompt")
+    with pytest.raises(PasswordUnavailable) as exc:
+        resolve_password("https://sbm.test", "alice")
+    assert "Run 'sbm configure'" in str(exc.value)
+    mock_prompt.assert_not_called()
+
+
+def test_resolve_password_prompts_on_tty_when_no_keyring(mocker):
+    mocker.patch("sbm_cli.credentials.get_password",
+                 side_effect=NoKeyringAvailable("no daemon"))
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=True)
+    mocker.patch("sbm_cli.credentials.click.prompt", return_value="typed")
+    assert resolve_password("https://sbm.test", "alice") == ("typed", "prompt")
+
+
+def test_resolve_password_no_tty_no_keyring_raises_without_prompting(mocker):
+    mocker.patch("sbm_cli.credentials.get_password",
+                 side_effect=NoKeyringAvailable("no daemon"))
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=False)
+    mock_prompt = mocker.patch("sbm_cli.credentials.click.prompt")
+    with pytest.raises(PasswordUnavailable) as exc:
+        resolve_password("https://sbm.test", "alice")
+    assert "SBM_CLI_PASSWORD" in str(exc.value)
+    mock_prompt.assert_not_called()
+
+
+def test_resolve_password_empty_prompt_raises(mocker):
+    mocker.patch("sbm_cli.credentials.get_password",
+                 side_effect=NoKeyringAvailable("no daemon"))
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=True)
+    mocker.patch("sbm_cli.credentials.click.prompt", return_value="")
+    with pytest.raises(PasswordUnavailable):
+        resolve_password("https://sbm.test", "alice")
+
+
+def test_password_unavailable_is_a_permission_error():
+    """Existing `except PermissionError` handlers must catch it unchanged."""
+    assert issubclass(PasswordUnavailable, PermissionError)
+
+
+def test_stdin_is_tty_survives_closed_stdin(mocker):
+    mocker.patch("sbm_cli.credentials.sys.stdin", None)
+    assert _stdin_is_tty() is False

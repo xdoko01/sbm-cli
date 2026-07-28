@@ -177,9 +177,12 @@ def _toml_str(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def dump_config(config: Config) -> str:
+    """Serialize a Config to TOML text. The result ends with a newline.
 
+    Config has no password field, so the output structurally cannot contain
+    a credential.
+    """
     lines: list[str] = [
         "[connection]",
         f'host       = "{_toml_str(config.host)}"',
@@ -242,4 +245,10 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
             )
 
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
+    """Write the config to `path`, creating the parent directory if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_config(config), encoding="utf-8")

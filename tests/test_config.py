@@ -524,3 +524,37 @@ report_ids = []
     assert "keyring" in captured.err.lower()
     # Config was still returned correctly
     assert config.host == "https://sbm.test"
+
+
+# ---------------------------------------------------------------------------
+# dump_config
+# ---------------------------------------------------------------------------
+
+def test_dump_config_matches_save_config(tmp_path, sample_config):
+    from sbm_cli.config import dump_config
+    path = tmp_path / "config.toml"
+    save_config(sample_config, path)
+    assert dump_config(sample_config) == path.read_text(encoding="utf-8")
+
+
+def test_dump_config_round_trips(tmp_path, sample_config):
+    """dump -> load preserves every section."""
+    from sbm_cli.config import dump_config
+    path = tmp_path / "config.toml"
+    path.write_text(dump_config(sample_config), encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded.host == sample_config.host
+    assert loaded.username == sample_config.username
+    assert loaded.verify_ssl == sample_config.verify_ssl
+    assert loaded.table_id == sample_config.table_id
+    assert loaded.report_ids == sample_config.report_ids
+    assert set(loaded.transitions) == set(sample_config.transitions)
+    assert loaded.transitions["transfer"].field_types == {"L3_SPECIALIST_GROUP": "list"}
+    assert loaded.transitions["close"].pre_transition_id == 148
+    assert loaded.teams["my-team"].name == "L3 Example Team"
+
+
+def test_dump_config_contains_no_password_key(sample_config):
+    """Config has no password field, so exported TOML structurally cannot leak one."""
+    from sbm_cli.config import dump_config
+    assert "password" not in dump_config(sample_config).lower()

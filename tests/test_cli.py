@@ -1166,6 +1166,44 @@ def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker)
     assert kwargs.get("password") == "mypassword"
 
 
+def test_config_env_var_is_used(runner: CliRunner, monkeypatch):
+    monkeypatch.setenv("SBM_CLI_CONFIG", "/tmp/custom/sbm.toml")
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()) as mock_load:
+        runner.invoke(main, ["schema"], catch_exceptions=False)
+    assert mock_load.call_args[0][0] == Path("/tmp/custom/sbm.toml")
+
+
+def test_config_flag_beats_config_env_var(runner: CliRunner, monkeypatch):
+    monkeypatch.setenv("SBM_CLI_CONFIG", "/tmp/from-env.toml")
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()) as mock_load:
+        runner.invoke(main, ["--config", "/tmp/from-flag.toml", "schema"],
+                      catch_exceptions=False)
+    assert mock_load.call_args[0][0] == Path("/tmp/from-flag.toml")
+
+
+def test_default_config_path_when_nothing_set(runner: CliRunner):
+    from sbm_cli.config import DEFAULT_CONFIG_PATH
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()) as mock_load:
+        runner.invoke(main, ["schema"], catch_exceptions=False)
+    assert mock_load.call_args[0][0] == DEFAULT_CONFIG_PATH
+
+
+def test_configure_transition_honours_config_path(runner: CliRunner, tmp_path, monkeypatch):
+    """Regression: configure transition used to hardcode DEFAULT_CONFIG_PATH."""
+    target = tmp_path / "sbm.toml"
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()) as mock_load:
+        with patch("sbm_cli.cli.save_config") as mock_save:
+            result = runner.invoke(
+                main, ["configure", "transition", "newone"],
+                input="777\nFIELD_A\n\n\n",
+                catch_exceptions=False,
+            )
+    assert result.exit_code == 0
+    assert mock_load.call_args[0][0] == target
+    assert mock_save.call_args[0][1] == target
+
+
 def test_client_uses_env_password(runner: CliRunner, monkeypatch, mocker):
     """SBM_CLI_PASSWORD reaches SBMClient and the keyring is never consulted."""
     monkeypatch.setenv("SBM_CLI_PASSWORD", "envsecret")

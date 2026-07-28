@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -16,13 +17,31 @@ from sbm_cli.config import (
 from sbm_cli import credentials, formatters
 
 
+CONFIG_ENV_VAR = "SBM_CLI_CONFIG"
+
+
+def resolve_config_path(cli_option: str | None) -> Path:
+    """Resolve the config file location.
+
+    Precedence: --config flag > SBM_CLI_CONFIG > ~/.sbm-cli/config.toml.
+    """
+    if cli_option:
+        return Path(cli_option)
+    env_path = os.environ.get(CONFIG_ENV_VAR)
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_CONFIG_PATH
+
+
 # ---------------------------------------------------------------------------
 # Application context
 # ---------------------------------------------------------------------------
 
 class AppContext:
-    def __init__(self, config: Config, pretty: bool, quiet: bool, indent: bool = False) -> None:
+    def __init__(self, config: Config, pretty: bool, quiet: bool, indent: bool = False,
+                 config_path: Path = DEFAULT_CONFIG_PATH) -> None:
         self.config = config
+        self.config_path = config_path
         self.pretty = pretty
         self.quiet = quiet
         self.indent = indent
@@ -87,17 +106,19 @@ pass_ctx = click.make_pass_decorator(AppContext)
 def main(ctx: click.Context, pretty: bool, config_path: str | None,
          quiet: bool, indent: bool) -> None:
     """SBM 12.0 JSON API command-line client."""
-    config_file = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    config_file = resolve_config_path(config_path)
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]),
+                             pretty, quiet, indent, config_path=config_file)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]),
+                             pretty, quiet, indent, config_path=config_file)
         return
 
     try:
@@ -110,7 +131,7 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
         }, indent=2 if indent else None))
         sys.exit(2)
 
-    ctx.obj = AppContext(config, pretty, quiet, indent)
+    ctx.obj = AppContext(config, pretty, quiet, indent, config_path=config_file)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +188,8 @@ def configure_setup(ctx: click.Context) -> None:
         verify_ssl=verify_ssl, table_id=table_id, report_ids=report_ids,
         list_fields=list_fields,
     )
-    save_config(config)
+    config_path = ctx.obj.config_path
+    save_config(config, config_path)
     try:
         credentials.set_password(host, username, password)
         click.echo(
@@ -179,7 +201,7 @@ def configure_setup(ctx: click.Context) -> None:
             "your password on each run.",
             err=True,
         )
-    click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
+    click.echo(f"Config written to {config_path}", err=True)
 
     click.echo("Testing connection...", err=True)
     client = None
@@ -220,7 +242,7 @@ def configure_setup(ctx: click.Context) -> None:
                 for f in raw_defs
                 if "dbname" in f
             }
-            save_config(config)
+            save_config(config, config_path)
             click.echo(f"Stored {len(config.fields)} field definitions.", err=True)
         except Exception as exc:
             click.echo(f"Field discovery failed (skipping): {exc}", err=True)
@@ -228,13 +250,14 @@ def configure_setup(ctx: click.Context) -> None:
 
 @configure.command("transition")
 @click.argument("name")
-def configure_transition(name: str) -> None:
-    """Add or update a named transition in ~/.sbm-cli/config.toml.
+@pass_ctx
+def configure_transition(ctx: AppContext, name: str) -> None:
+    """Add or update a named transition in the config file.
 
     Example: sbm configure transition assign
     """
     try:
-        config = load_config(DEFAULT_CONFIG_PATH)
+        config = load_config(ctx.config_path)
     except ConfigError as exc:
         click.echo(f"Error loading config: {exc}", err=True)
         click.echo("Run 'sbm configure setup' first to create the config file.", err=True)
@@ -280,11 +303,11 @@ def configure_transition(name: str) -> None:
         pre_transition_optional=pre_optional,
     )
     try:
-        save_config(config)
+        save_config(config, ctx.config_path)
     except ConfigError as exc:
         click.echo(f"Error saving config: {exc}", err=True)
         sys.exit(2)
-    click.echo(f"Transition '{name}' saved to {DEFAULT_CONFIG_PATH}", err=True)
+    click.echo(f"Transition '{name}' saved to {ctx.config_path}", err=True)
 
 
 # ---------------------------------------------------------------------------

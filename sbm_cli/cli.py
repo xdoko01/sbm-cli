@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import click
@@ -11,9 +13,25 @@ import requests
 from sbm_cli.client import SBMClient, SBMError
 from sbm_cli.config import (
     Config, ConfigError, FieldDef, TransitionConfig, UserConfig,
-    load_config, save_config, DEFAULT_CONFIG_PATH,
+    load_config, save_config, dump_config, strip_password, DEFAULT_CONFIG_PATH,
 )
 from sbm_cli import credentials, formatters
+
+
+CONFIG_ENV_VAR = "SBM_CLI_CONFIG"
+
+
+def resolve_config_path(cli_option: str | None) -> Path:
+    """Resolve the config file location.
+
+    Precedence: --config flag > SBM_CLI_CONFIG > ~/.sbm-cli/config.toml.
+    """
+    if cli_option:
+        return Path(cli_option)
+    env_path = os.environ.get(CONFIG_ENV_VAR)
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_CONFIG_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -21,26 +39,27 @@ from sbm_cli import credentials, formatters
 # ---------------------------------------------------------------------------
 
 class AppContext:
-    def __init__(self, config: Config, pretty: bool, quiet: bool, indent: bool = False) -> None:
+    def __init__(self, config: Config, pretty: bool, quiet: bool, indent: bool = False,
+                 config_path: Path = DEFAULT_CONFIG_PATH) -> None:
         self.config = config
+        self.config_path = config_path
         self.pretty = pretty
         self.quiet = quiet
         self.indent = indent
         self._client: SBMClient | None = None
+        self._password_source: str | None = None
+
+    @property
+    def password_source(self) -> str | None:
+        """Where the password came from, or None if no client was built yet."""
+        return self._password_source
 
     @property
     def client(self) -> SBMClient:
         if self._client is None:
-            try:
-                password = credentials.get_password(self.config.host, self.config.username)
-            except credentials.NoKeyringAvailable:
-                password = click.prompt("Password", hide_input=True)
-
-            if not password:
-                raise PermissionError(
-                    f"No password found in {credentials.platform_keyring_name()}. "
-                    "Run 'sbm configure' to set up credentials."
-                )
+            password, self._password_source = credentials.resolve_password(
+                self.config.host, self.config.username
+            )
             self._client = SBMClient(
                 host=self.config.host,
                 username=self.config.username,
@@ -88,17 +107,19 @@ pass_ctx = click.make_pass_decorator(AppContext)
 def main(ctx: click.Context, pretty: bool, config_path: str | None,
          quiet: bool, indent: bool) -> None:
     """SBM 12.0 JSON API command-line client."""
-    config_file = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    config_file = resolve_config_path(config_path)
 
     if ctx.invoked_subcommand == "configure":
         # configure command creates the config — no existing config needed
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]),
+                             pretty, quiet, indent, config_path=config_file)
         return
 
     # When --help is requested, skip config loading so help text is always
     # available even without a config file on disk.
     if "--help" in sys.argv or "-h" in sys.argv:
-        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]), pretty, quiet, indent)
+        ctx.obj = AppContext(Config(host="", username="", verify_ssl=False, table_id=0, report_ids=[]),
+                             pretty, quiet, indent, config_path=config_file)
         return
 
     try:
@@ -111,7 +132,7 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
         }, indent=2 if indent else None))
         sys.exit(2)
 
-    ctx.obj = AppContext(config, pretty, quiet, indent)
+    ctx.obj = AppContext(config, pretty, quiet, indent, config_path=config_file)
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +142,7 @@ def main(ctx: click.Context, pretty: bool, config_path: str | None,
 @main.group(invoke_without_command=True)
 @click.pass_context
 def configure(ctx: click.Context) -> None:
-    """Interactive setup commands — writes ~/.sbm-cli/config.toml.
+    """Setup commands — write the config file (see --config / SBM_CLI_CONFIG).
 
     With no subcommand, runs the full setup wizard (same as 'configure setup').
     """
@@ -168,7 +189,8 @@ def configure_setup(ctx: click.Context) -> None:
         verify_ssl=verify_ssl, table_id=table_id, report_ids=report_ids,
         list_fields=list_fields,
     )
-    save_config(config)
+    config_path = ctx.obj.config_path
+    save_config(config, config_path)
     try:
         credentials.set_password(host, username, password)
         click.echo(
@@ -180,7 +202,7 @@ def configure_setup(ctx: click.Context) -> None:
             "your password on each run.",
             err=True,
         )
-    click.echo(f"Config written to {DEFAULT_CONFIG_PATH}", err=True)
+    click.echo(f"Config written to {config_path}", err=True)
 
     click.echo("Testing connection...", err=True)
     client = None
@@ -221,7 +243,7 @@ def configure_setup(ctx: click.Context) -> None:
                 for f in raw_defs
                 if "dbname" in f
             }
-            save_config(config)
+            save_config(config, config_path)
             click.echo(f"Stored {len(config.fields)} field definitions.", err=True)
         except Exception as exc:
             click.echo(f"Field discovery failed (skipping): {exc}", err=True)
@@ -229,13 +251,14 @@ def configure_setup(ctx: click.Context) -> None:
 
 @configure.command("transition")
 @click.argument("name")
-def configure_transition(name: str) -> None:
-    """Add or update a named transition in ~/.sbm-cli/config.toml.
+@pass_ctx
+def configure_transition(ctx: AppContext, name: str) -> None:
+    """Add or update a named transition in the config file.
 
     Example: sbm configure transition assign
     """
     try:
-        config = load_config(DEFAULT_CONFIG_PATH)
+        config = load_config(ctx.config_path)
     except ConfigError as exc:
         click.echo(f"Error loading config: {exc}", err=True)
         click.echo("Run 'sbm configure setup' first to create the config file.", err=True)
@@ -281,11 +304,127 @@ def configure_transition(name: str) -> None:
         pre_transition_optional=pre_optional,
     )
     try:
-        save_config(config)
+        save_config(config, ctx.config_path)
     except ConfigError as exc:
         click.echo(f"Error saving config: {exc}", err=True)
         sys.exit(2)
-    click.echo(f"Transition '{name}' saved to {DEFAULT_CONFIG_PATH}", err=True)
+    click.echo(f"Transition '{name}' saved to {ctx.config_path}", err=True)
+
+
+@configure.command("export")
+@pass_ctx
+def configure_export(ctx: AppContext) -> None:
+    """Print the current config as TOML on stdout, for copying to another machine.
+
+    The output never contains a password — Config has no password field.
+    Redirect it to a file: sbm configure export > sbm-config.toml
+    """
+    try:
+        config = load_config(ctx.config_path)
+    except ConfigError as exc:
+        ctx.error("configure export", "config_error", str(exc), exit_code=2)
+    click.echo(dump_config(config), nl=False)  # dump_config already ends in a newline
+
+
+@configure.command("import")
+@click.argument("source", default="-")
+@click.option("--force", is_flag=True, help="Overwrite an existing config file")
+@pass_ctx
+def configure_import(ctx: AppContext, source: str, force: bool) -> None:
+    """Install a config from PATH, or from stdin when PATH is '-' (the default).
+
+    Validates before installing, so a malformed import never touches an
+    existing config. Does not contact the SBM host — run 'sbm auth check'
+    for that.
+    """
+    target = ctx.config_path
+    if target.exists() and not force:
+        ctx.error("configure import", "config_error",
+                  f"{target} already exists. Pass --force to overwrite.",
+                  exit_code=2)
+
+    try:
+        # utf-8-sig / lstrip: a UTF-8 BOM is common on Windows (Notepad,
+        # PowerShell's `Out-File -Encoding utf8`) and tomllib rejects one.
+        text = (sys.stdin.read().lstrip("﻿") if source == "-"
+                else Path(source).read_text(encoding="utf-8-sig"))
+    except OSError as exc:
+        ctx.error("configure import", "config_error",
+                  f"Cannot read {source}: {exc}", exit_code=2)
+
+    # Strip before validating: load_config would otherwise migrate a plaintext
+    # password into the keyring and rewrite the temp file.
+    try:
+        text, removed = strip_password(text)
+    except ConfigError as exc:
+        ctx.error("configure import", "validation_error", str(exc), exit_code=3)
+    if removed:
+        ctx.status("Warning: plaintext password removed from the imported config — "
+                   "set SBM_CLI_PASSWORD or run 'sbm configure setup'.")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=".sbm-import-", suffix=".toml")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        config = load_config(tmp)      # validation: TOML syntax + required keys
+    except ConfigError as exc:
+        tmp.unlink(missing_ok=True)
+        ctx.error("configure import", "validation_error", str(exc), exit_code=3)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, target)
+
+    ctx.output("configure import", {
+        "path": str(target),
+        "transitions": len(config.transitions),
+        "teams": len(config.teams),
+        "users": len(config.users),
+        "fields": len(config.fields),
+        "report_ids": config.report_ids,
+    })
+
+
+# ---------------------------------------------------------------------------
+# auth
+# ---------------------------------------------------------------------------
+
+@main.group()
+def auth() -> None:
+    """Credential commands."""
+
+
+@auth.command("check")
+@pass_ctx
+def auth_check(ctx: AppContext) -> None:
+    """Verify that the resolved credentials authenticate against the SBM host.
+
+    Reports which source the password came from, never the password itself.
+    Useful as a one-shot smoke test after 'sbm configure import' on a
+    headless machine.
+    """
+    try:
+        ctx.client.check_auth()
+    except PermissionError as exc:      # includes credentials.PasswordUnavailable
+        ctx.error("auth check", "auth_error", str(exc), exit_code=2)
+    except SBMError as exc:
+        ctx.error("auth check", "api_error", str(exc), exit_code=1)
+    except requests.exceptions.RequestException as exc:
+        ctx.error("auth check", "api_error",
+                  f"Could not reach {ctx.config.host}: {exc}", exit_code=1)
+
+    if ctx.pretty:
+        click.echo(f"Authenticated as {ctx.config.username} at {ctx.config.host}")
+        click.echo(f"Password source: {ctx.password_source}")
+    else:
+        ctx.output("auth check", {
+            "host": ctx.config.host,
+            "username": ctx.config.username,
+            "password_source": ctx.password_source,
+            "authenticated": True,
+        })
 
 
 # ---------------------------------------------------------------------------

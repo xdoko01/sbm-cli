@@ -1,6 +1,6 @@
 # sbm-cli — Installation and Usage Manual
 
-**Version:** 0.5.0  
+**Version:** 0.6.0  
 **Date:** 2026-07-08  
 **Platform:** Windows 10/11 · macOS 13+ · Linux (Ubuntu 22.04+)
 
@@ -22,10 +22,15 @@
    - 5.4 [Updating your password](#54-updating-your-password)
    - 5.5 [Removing the credential](#55-removing-the-credential)
    - 5.6 [Migration from a plaintext config](#56-migration-from-an-old-plaintext-config)
+   - 5.7 [Headless machines, CI, and AI agents](#57-headless-machines-ci-and-ai-agents)
 6. [Command Reference](#6-command-reference)
    - [Global flags](#global-flags)
+   - [Environment variables](#environment-variables)
    - [configure setup](#sbm-configure-setup)
    - [configure transition](#sbm-configure-transition-name)
+   - [configure export](#sbm-configure-export)
+   - [configure import](#sbm-configure-import-path)
+   - [auth check](#sbm-auth-check)
    - [schema](#sbm-schema)
    - [list](#sbm-list)
    - [get](#sbm-get-ticket-id)
@@ -76,7 +81,7 @@ Before installing sbm-cli, confirm that the following are in place:
 | macOS 13+ | Homebrew Python recommended | `brew install python@3.11` |
 | Linux (Ubuntu 22.04+) | System Python or pyenv | `sudo apt install python3 python3-pip` |
 | Linux (desktop) | GNOME Keyring or KWallet | Required for persistent password storage; see Section 5.3 |
-| Linux (headless/server) | None | Password is prompted interactively on each run; see Section 5.3 |
+| Linux (headless/server) | None | Set the password in `SBM_CLI_PASSWORD`; see Section 5.7 |
 
 ### Installing Python
 
@@ -179,10 +184,10 @@ pip install sbm-cli
 
 ### Installing from a wheel file (offline / no internet access)
 
-If you received a `.whl` file directly (for example, `sbm_cli-0.5.0-py3-none-any.whl`):
+If you received a `.whl` file directly (for example, `sbm_cli-0.6.0-py3-none-any.whl`):
 
 ```
-pip install sbm_cli-0.5.0-py3-none-any.whl
+pip install sbm_cli-0.6.0-py3-none-any.whl
 ```
 
 ### Verifying the installation
@@ -196,7 +201,7 @@ sbm --version
 Expected output:
 
 ```
-sbm, version 0.5.0
+sbm, version 0.6.0
 ```
 
 If the command is not found after reopening your terminal, see [If the `sbm` command is not found](#if-the-sbm-command-is-not-found) below.
@@ -381,11 +386,12 @@ secret-tool clear service sbm-cli:https://sbm.example.com
 On servers or CI systems without a desktop keyring daemon, sbm-cli cannot store credentials persistently. It handles this gracefully:
 
 - `sbm configure setup` will warn you that no keyring is available and continue
-- On every subsequent command, sbm-cli prompts interactively:
+- Supply the password in the `SBM_CLI_PASSWORD` environment variable — see [Section 5.7](#57-headless-machines-ci-and-ai-agents)
+- If you are on a real terminal and `SBM_CLI_PASSWORD` is not set, sbm-cli prompts interactively instead:
   ```
   Password:
   ```
-- The password is used for that invocation only — it is never written to disk
+- Either way the password is used for that invocation only — it is never written to disk
 
 ### 5.4 Updating your password
 
@@ -422,7 +428,59 @@ Versions of sbm-cli older than 0.2.0 stored the password directly in `config.tom
 3. `config.toml` is rewritten with the `password =` line removed
 4. A one-time message appears: `Password migrated to <platform keyring name>.`
 
-On headless Linux without a keyring daemon, migration is skipped and a warning is printed. The plaintext password remains in `config.toml` until you run `sbm configure setup` in an environment with a keyring available.
+On headless Linux without a keyring daemon, migration is skipped and a warning is printed. The plaintext password remains in `config.toml` until you run `sbm configure setup` in an environment with a keyring available — or, preferably, delete the `password =` line and use `SBM_CLI_PASSWORD` instead ([Section 5.7](#57-headless-machines-ci-and-ai-agents)). Note that `sbm configure import` strips a plaintext password rather than installing it.
+
+### 5.7 Headless machines, CI, and AI agents
+
+A machine with no keyring daemon and no terminal — a CI runner, a container, a cloud sandbox driven by an AI coding agent — needs two things: a password it can reach without a prompt, and a config file. Two environment variables cover both.
+
+**`SBM_CLI_PASSWORD`** — checked *before* the keyring. When it is set and non-empty, sbm-cli uses it and never touches the keyring. The value is used verbatim, including any leading or trailing whitespace, so quote it. The password lives only in the process environment; it is never written to disk.
+
+**`SBM_CLI_CONFIG`** — an absolute or relative path to the config file, so you do not have to append `--config` to every command. The `--config` flag still wins when both are given, and `~/.sbm-cli/config.toml` remains the fallback.
+
+**Moving your config to the headless machine.** `sbm configure setup` is interactive and cannot produce transitions, teams or field definitions non-interactively. Export the config you already have instead:
+
+```bash
+# on your desktop, where a working config already exists
+sbm configure export > sbm-config.toml
+```
+
+`configure export` prints raw TOML on stdout — no JSON envelope — so redirection just works. The output never contains a password: the config format has no password field at all, so the file is safe to commit to a private repo or paste into a secret.
+
+Then, on the headless machine:
+
+```bash
+export SBM_CLI_PASSWORD='your-password'
+sbm configure import sbm-config.toml
+sbm auth check
+```
+
+`configure import` reads from the given path, or from stdin when the path is `-` or omitted. It validates before installing, so a malformed file never damages an existing config, and it refuses to overwrite an existing config unless you pass `--force`. A UTF-8 byte-order mark is tolerated, which matters if the file was produced by Notepad or by PowerShell's `Out-File -Encoding utf8`. On success it reports what it installed:
+
+```json
+{"ok": true, "command": "configure import", "data": {"path": "/home/ci/.sbm-cli/config.toml",
+ "transitions": 7, "teams": 18, "users": 23, "fields": 0, "report_ids": [2208]}}
+```
+
+Check those counts. A config with `"transitions": 0` will handle `sbm list` and `sbm get` but fail on every `sbm transition`.
+
+**Verifying credentials.** `sbm auth check` resolves the password, calls the SBM host once, and reports which source the password came from — never the password itself:
+
+```json
+{"ok": true, "command": "auth check", "data": {"host": "https://sbm.example.com",
+ "username": "alice", "password_source": "env:SBM_CLI_PASSWORD", "authenticated": true}}
+```
+
+`password_source` is `env:SBM_CLI_PASSWORD`, `keyring`, or `prompt`. Exit code 0 means authenticated, 2 means the credentials were rejected or no password could be resolved, 1 means the host was unreachable.
+
+**No silent hangs.** When stdin is not a terminal, sbm-cli no longer falls back to the password prompt — a prompt on redirected stdin would block forever. It fails immediately instead:
+
+```json
+{"ok": false, "command": "list", "error": {"type": "auth_error",
+ "message": "No password available. Set SBM_CLI_PASSWORD, or run 'sbm configure setup' on an interactive terminal."}}
+```
+
+Interactive use on a real terminal is unaffected.
 
 ---
 
@@ -449,6 +507,17 @@ sbm --config ~/alt/config.toml list
 ```
 
 > **Note:** Use an absolute or home-relative path with `--config`.
+
+---
+
+### Environment variables
+
+| Variable | Meaning |
+|---|---|
+| `SBM_CLI_PASSWORD` | Password to use, checked before the system keyring. Used verbatim, whitespace included. Never written to disk. |
+| `SBM_CLI_CONFIG` | Path to the config file. Overridden by `--config`; falls back to `~/.sbm-cli/config.toml`. |
+
+Both are intended for headless machines, CI, and AI agents — see [Section 5.7](#57-headless-machines-ci-and-ai-agents).
 
 ---
 
@@ -489,6 +558,66 @@ Once configured, the transition can be run with:
 ```
 sbm transition assign INC-12345 --field OWNER=john.doe
 ```
+
+---
+
+### `sbm configure export`
+
+Prints the current config as raw TOML on stdout — no JSON envelope — so it can be redirected straight to a file. The output never contains a password.
+
+```
+sbm configure export > sbm-config.toml
+```
+
+Use it to copy a complete working config (including transitions, teams and users) to another machine. See [Section 5.7](#57-headless-machines-ci-and-ai-agents).
+
+---
+
+### `sbm configure import [PATH]`
+
+Installs a config from `PATH`, or from stdin when `PATH` is `-` or omitted.
+
+```
+sbm configure import sbm-config.toml
+sbm configure import - < sbm-config.toml
+cat sbm-config.toml | sbm configure import
+sbm configure import sbm-config.toml --force
+```
+
+| Flag | Meaning |
+|---|---|
+| `--force` | Overwrite an existing config file (without it, an existing config is left untouched and the command exits 2) |
+
+The file is validated before it is installed, so a malformed import never damages an existing config. A UTF-8 byte-order mark is tolerated. A legacy plaintext `password =` line is stripped, with a warning on stderr, rather than installed.
+
+On success it reports what was installed — check the counts, because a config with `"transitions": 0` cannot run any transition:
+
+```json
+{"ok": true, "command": "configure import", "data": {"path": "/home/ci/.sbm-cli/config.toml",
+ "transitions": 7, "teams": 18, "users": 23, "fields": 0, "report_ids": [2208]}}
+```
+
+Exit codes: 0 installed, 2 the target exists and `--force` was not given (or the source could not be read), 3 the incoming config is invalid.
+
+---
+
+### `sbm auth check`
+
+Verifies that the resolved credentials authenticate against the configured host. Makes exactly one API call and changes nothing.
+
+```
+sbm auth check
+sbm --pretty auth check
+```
+
+```json
+{"ok": true, "command": "auth check", "data": {"host": "https://sbm.example.com",
+ "username": "alice", "password_source": "env:SBM_CLI_PASSWORD", "authenticated": true}}
+```
+
+`password_source` is `env:SBM_CLI_PASSWORD`, `keyring`, or `prompt`. The password itself is never printed.
+
+Exit codes: 0 authenticated, 2 credentials rejected or no password could be resolved, 1 host unreachable.
 
 ---
 
@@ -781,4 +910,4 @@ After uninstalling, optionally clean up the remaining files:
 
 ---
 
-*End of manual — sbm-cli v0.5.0*
+*End of manual — sbm-cli v0.6.0*

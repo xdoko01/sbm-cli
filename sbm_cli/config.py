@@ -164,6 +164,38 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     return config
 
 
+_PASSWORD_LINE_RE = re.compile(r'^\s*password\s*=')
+
+
+def strip_password(text: str) -> tuple[str, bool]:
+    """Remove a plaintext `password` assignment from config TOML text.
+
+    Returns (cleaned_text, removed). Raises ConfigError if the text is not
+    valid TOML, or if a password survives the line-based strip (for example
+    because it sits inside an inline table) — a caller must never silently
+    persist one.
+    """
+    def has_password(raw: str) -> bool:
+        try:
+            data = tomllib.loads(raw)
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"Invalid TOML: {exc}") from exc
+        return bool(data.get("connection", {}).get("password"))
+
+    if not has_password(text):
+        return text, False
+
+    cleaned = "".join(
+        line for line in text.splitlines(keepends=True)
+        if not _PASSWORD_LINE_RE.match(line)
+    )
+    if has_password(cleaned):
+        raise ConfigError(
+            "Remove the plaintext 'password' key from the config before importing."
+        )
+    return cleaned, True
+
+
 _BARE_KEY_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
@@ -177,9 +209,12 @@ def _toml_str(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def dump_config(config: Config) -> str:
+    """Serialize a Config to TOML text. The result ends with a newline.
 
+    Config has no password field, so the output structurally cannot contain
+    a credential.
+    """
     lines: list[str] = [
         "[connection]",
         f'host       = "{_toml_str(config.host)}"',
@@ -242,4 +277,10 @@ def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
             )
 
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def save_config(config: Config, path: Path = DEFAULT_CONFIG_PATH) -> None:
+    """Write the config to `path`, creating the parent directory if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_config(config), encoding="utf-8")

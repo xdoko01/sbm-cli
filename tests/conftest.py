@@ -40,6 +40,17 @@ def mock_session(mocker):
 
 
 @pytest.fixture(autouse=True)
+def clean_sbm_env(monkeypatch):
+    """Keep sbm-cli env vars from leaking in from the developer's shell.
+
+    Without this, whether SBM_CLI_PASSWORD happens to be exported decides
+    which credential path the tests exercise.
+    """
+    monkeypatch.delenv("SBM_CLI_PASSWORD", raising=False)
+    monkeypatch.delenv("SBM_CLI_CONFIG", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def mock_credentials(mocker):
     """Patch keyring calls globally so tests never hit the real system keyring.
 

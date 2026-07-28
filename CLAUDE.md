@@ -14,6 +14,39 @@ Run this first. It returns the configured host, default table/report IDs, availa
 named transitions, and configured teams. If it fails with a config_error, run
 `sbm configure` to create the config file.
 
+`sbm schema` reads only the local config — it makes no API call. To confirm the
+credentials actually work, run `sbm auth check`.
+
+## Headless / non-interactive use
+
+On a machine with no keyring and no terminal (CI runner, container, cloud VM),
+two environment variables replace the interactive paths:
+
+| Variable | Meaning |
+|---|---|
+| `SBM_CLI_PASSWORD` | Password, checked before the keyring. Used verbatim (whitespace included). Never written to disk. |
+| `SBM_CLI_CONFIG` | Path to the config file. `--config` overrides it; default is `~/.sbm-cli/config.toml`. |
+
+Bootstrap a fresh machine by exporting the config from one that already works —
+`configure setup` is interactive and cannot produce transitions non-interactively:
+
+```bash
+# on the working machine
+sbm configure export > sbm-config.toml
+
+# on the headless machine
+export SBM_CLI_PASSWORD='...'
+sbm configure import sbm-config.toml   # add --force to overwrite an existing config
+sbm auth check                         # smoke test; exit 0 = authenticated
+```
+
+Check the counts `configure import` reports: `"transitions": 0` means `sbm list`
+and `sbm get` will work but every `sbm transition` will fail.
+
+When stdin is not a terminal, `sbm` does **not** prompt for a password — it exits
+2 with `auth_error` naming `SBM_CLI_PASSWORD`. Do not try to pipe a password into
+stdin; set the variable instead.
+
 ## Workflow for transitions
 
 Always call `sbm schema` first to discover configured transitions and their required fields.
@@ -54,6 +87,9 @@ sbm field-values FIELD --table TABLE_ID  # valid values for a relational field
 sbm teams                                # configured team slugs and IDs
 sbm configure setup                      # full interactive setup wizard
 sbm configure transition assign          # add/update a named transition interactively
+sbm auth check                           # verify credentials (reports password source)
+sbm configure export > sbm-config.toml   # dump config as TOML (never includes a password)
+sbm configure import sbm-config.toml     # install a config (--force to overwrite)
 sbm fields 02440942                      # list all field dbnames, types, labels
 sbm fields 02440942 --fields FUNCTIONALITY,APPLICATION1,COUNTRY_IM,ROOT_CAUSE  # probe specific fields
 

@@ -27,20 +27,19 @@ class AppContext:
         self.quiet = quiet
         self.indent = indent
         self._client: SBMClient | None = None
+        self._password_source: str | None = None
+
+    @property
+    def password_source(self) -> str | None:
+        """Where the password came from, or None if no client was built yet."""
+        return self._password_source
 
     @property
     def client(self) -> SBMClient:
         if self._client is None:
-            try:
-                password = credentials.get_password(self.config.host, self.config.username)
-            except credentials.NoKeyringAvailable:
-                password = click.prompt("Password", hide_input=True)
-
-            if not password:
-                raise PermissionError(
-                    f"No password found in {credentials.platform_keyring_name()}. "
-                    "Run 'sbm configure' to set up credentials."
-                )
+            password, self._password_source = credentials.resolve_password(
+                self.config.host, self.config.username
+            )
             self._client = SBMClient(
                 host=self.config.host,
                 username=self.config.username,

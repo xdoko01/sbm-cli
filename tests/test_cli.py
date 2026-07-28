@@ -1147,6 +1147,8 @@ def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker)
         "sbm_cli.credentials.get_password",
         side_effect=NoKeyringAvailable("no keyring"),
     )
+    # The prompt is TTY-gated now, and CliRunner's stdin is not a TTY.
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=True)
     mock_items = [
         {"id": {"id": 1, "itemIdPrefixed": "0001"},
          "fields": {"TITLE": {"value": "T1"}, "STATE": {"value": "Open"}}}
@@ -1162,6 +1164,34 @@ def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker)
     assert result.exit_code == 0
     _, kwargs = MockClient.call_args
     assert kwargs.get("password") == "mypassword"
+
+
+def test_client_uses_env_password(runner: CliRunner, monkeypatch, mocker):
+    """SBM_CLI_PASSWORD reaches SBMClient and the keyring is never consulted."""
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "envsecret")
+    mock_get = mocker.patch("sbm_cli.credentials.get_password", return_value="keyringsecret")
+    with patch("sbm_cli.cli.load_config", return_value=_make_app_config()):
+        with patch("sbm_cli.cli.SBMClient") as MockClient:
+            MockClient.return_value.list_items_by_report.return_value = []
+            result = runner.invoke(main, ["list"], catch_exceptions=False)
+    assert result.exit_code == 0
+    _, kwargs = MockClient.call_args
+    assert kwargs.get("password") == "envsecret"
+    mock_get.assert_not_called()
+
+
+def test_client_no_password_no_tty_exits_2_without_hanging(runner: CliRunner, mocker):
+    """A headless box with no keyring must fail fast, not block on stdin."""
+    from sbm_cli.credentials import NoKeyringAvailable
+    mocker.patch("sbm_cli.credentials.get_password",
+                 side_effect=NoKeyringAvailable("no daemon"))
+    mocker.patch("sbm_cli.credentials._stdin_is_tty", return_value=False)
+    result = _invoke(runner, ["list"])
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["error"]["type"] == "auth_error"
+    assert "SBM_CLI_PASSWORD" in data["error"]["message"]
 
 
 def test_client_error_message_uses_platform_keyring_name(runner: CliRunner, mocker):

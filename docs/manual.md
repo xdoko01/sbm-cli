@@ -1,7 +1,7 @@
 # sbm-cli — Installation and Usage Manual
 
 **Version:** 0.6.0  
-**Date:** 2026-07-08  
+**Date:** 2026-07-28  
 **Platform:** Windows 10/11 · macOS 13+ · Linux (Ubuntu 22.04+)
 
 ---
@@ -56,6 +56,8 @@ With sbm-cli you can:
 - **Inspect** the field schema of any ticket type
 
 All operations output clean JSON by default, or formatted tables with the `--pretty` flag. This makes sbm-cli easy to use both interactively and in scripts.
+
+Every command also runs **fully non-interactively**, so sbm-cli works on a CI runner, in a container, or under an AI coding agent with no keyring daemon and no terminal — see [Section 5.7](#57-headless-machines-ci-and-ai-agents).
 
 **Supported platforms:** Windows 10/11, macOS 13 (Ventura) or newer, and Linux (Ubuntu 22.04+ or equivalent).
 
@@ -801,9 +803,9 @@ This command reads from the `[teams]` section of `config.toml` — it does not q
 
 ## 7. Config File Reference
 
-Location: `C:\Users\<you>\.sbm-cli\config.toml` (Windows) or `~/.sbm-cli/config.toml` (macOS / Linux)
+Location: `C:\Users\<you>\.sbm-cli\config.toml` (Windows) or `~/.sbm-cli/config.toml` (macOS / Linux). Override it with the `--config` flag or the `SBM_CLI_CONFIG` environment variable.
 
-This file is created and maintained by `sbm configure setup` and `sbm configure transition`. You can also edit it directly in a text editor.
+This file is created and maintained by `sbm configure setup`, `sbm configure transition`, and `sbm configure import`. You can also edit it directly in a text editor, or copy it between machines with `sbm configure export` / `sbm configure import`.
 
 ```toml
 # ── Connection ───────────────────────────────────────────────────────────
@@ -860,7 +862,7 @@ SOLUTION_STEPS = { type = "text", label = "Solution Steps" }
 
 | Rule | Detail |
 |---|---|
-| No `password =` field | Password is in your system keyring, not here |
+| No `password =` field | Password is in your system keyring or `SBM_CLI_PASSWORD`, never in this file. `sbm configure import` strips a `password =` line rather than installing it |
 | Field names are case-sensitive | Use the exact database name from `sbm fields` |
 | List-type fields need `field_types` | Without this, sbm-cli sends a text value instead of an array and the transition may fail |
 | Config keys must be alphanumeric | Transition names may contain letters, digits, `-`, and `_` only |

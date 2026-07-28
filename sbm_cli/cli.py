@@ -12,7 +12,7 @@ import requests
 from sbm_cli.client import SBMClient, SBMError
 from sbm_cli.config import (
     Config, ConfigError, FieldDef, TransitionConfig, UserConfig,
-    load_config, save_config, DEFAULT_CONFIG_PATH,
+    load_config, save_config, dump_config, DEFAULT_CONFIG_PATH,
 )
 from sbm_cli import credentials, formatters
 
@@ -308,6 +308,21 @@ def configure_transition(ctx: AppContext, name: str) -> None:
         click.echo(f"Error saving config: {exc}", err=True)
         sys.exit(2)
     click.echo(f"Transition '{name}' saved to {ctx.config_path}", err=True)
+
+
+@configure.command("export")
+@pass_ctx
+def configure_export(ctx: AppContext) -> None:
+    """Print the current config as TOML on stdout, for copying to another machine.
+
+    The output never contains a password — Config has no password field.
+    Redirect it to a file: sbm configure export > sbm-config.toml
+    """
+    try:
+        config = load_config(ctx.config_path)
+    except ConfigError as exc:
+        ctx.error("configure export", "config_error", str(exc), exit_code=2)
+    click.echo(dump_config(config), nl=False)  # dump_config already ends in a newline
 
 
 # ---------------------------------------------------------------------------

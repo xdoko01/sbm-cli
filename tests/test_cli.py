@@ -1166,6 +1166,39 @@ def test_client_prompts_interactively_when_no_keyring(runner: CliRunner, mocker)
     assert kwargs.get("password") == "mypassword"
 
 
+def test_configure_export_prints_raw_toml(runner: CliRunner, tmp_path, monkeypatch):
+    from sbm_cli.config import save_config, load_config
+    target = tmp_path / "sbm.toml"
+    save_config(_make_app_config(), target)
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    result = runner.invoke(main, ["configure", "export"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert '{"ok"' not in result.stdout          # raw TOML, not the envelope
+    assert result.stdout.lstrip().startswith("[connection]")
+    round_trip = tmp_path / "round.toml"
+    round_trip.write_text(result.stdout, encoding="utf-8")
+    assert load_config(round_trip).report_ids == [2208]
+
+
+def test_configure_export_omits_password(runner: CliRunner, tmp_path, monkeypatch):
+    from sbm_cli.config import save_config
+    target = tmp_path / "sbm.toml"
+    save_config(_make_app_config(), target)
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(target))
+    monkeypatch.setenv("SBM_CLI_PASSWORD", "supersecret")
+    result = runner.invoke(main, ["configure", "export"], catch_exceptions=False)
+    assert "supersecret" not in result.stdout
+    assert "password" not in result.stdout.lower()
+
+
+def test_configure_export_missing_config_errors(runner: CliRunner, tmp_path, monkeypatch):
+    monkeypatch.setenv("SBM_CLI_CONFIG", str(tmp_path / "absent.toml"))
+    result = runner.invoke(main, ["configure", "export"], catch_exceptions=False)
+    assert result.exit_code == 2
+    data = json.loads(result.stdout)
+    assert data["error"]["type"] == "config_error"
+
+
 def test_config_env_var_is_used(runner: CliRunner, monkeypatch):
     monkeypatch.setenv("SBM_CLI_CONFIG", "/tmp/custom/sbm.toml")
     with patch("sbm_cli.cli.load_config", return_value=_make_app_config()) as mock_load:

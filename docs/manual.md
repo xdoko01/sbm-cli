@@ -397,13 +397,41 @@ On servers or CI systems without a desktop keyring daemon, sbm-cli cannot store 
 
 ### 5.4 Updating your password
 
-Re-run the setup wizard:
+When your SBM password changes (for example after a scheduled expiry), the password stored in the keyring goes stale and commands fail with an `auth_error`. Update the stored entry using either method below, then confirm with `sbm auth check`.
+
+**Option A — re-run the setup wizard**
 
 ```
 sbm configure setup
 ```
 
-When you reach the password prompt, type your new password. sbm-cli will overwrite the old entry in the keyring.
+When you reach the password prompt, type your new password. sbm-cli will overwrite the old entry in the keyring. This walks through the whole wizard, so it is the heavier option.
+
+**Option B — update only the keyring entry (quick)**
+
+This changes just the password and leaves `config.toml` untouched. Run it from the same Python environment that has sbm-cli's `keyring` dependency installed:
+
+```
+python -c "import keyring, getpass; keyring.set_password('sbm-cli:<host>', '<username>', getpass.getpass('SBM password: '))"
+```
+
+Replace `<host>` and `<username>` with the `host` and `username` values in your `config.toml` — the host exactly as written there, and the username bare (no `DOMAIN\`). For example:
+
+```
+python -c "import keyring, getpass; keyring.set_password('sbm-cli:https://sbm.example.com', 'alice', getpass.getpass('SBM password: '))"
+```
+
+`getpass` prompts for the password without echoing it, so it appears neither on screen nor in your shell history. If the host or username does not match the config exactly, the command still succeeds but writes a *new* unused entry, and sbm-cli keeps using the old password.
+
+Verify:
+
+```
+sbm auth check
+```
+
+`password_source` should be `keyring` and the exit code 0.
+
+> If you authenticate through `SBM_CLI_PASSWORD` instead of the keyring (see [Section 5.7](#57-headless-machines-ci-and-ai-agents)), just update that variable — the keyring is not consulted while it is set.
 
 ### 5.5 Removing the credential
 

@@ -72,6 +72,8 @@ def test_docs_show_plugin_install_commands(doc):
                     f"plugin update {plugin}@{marketplace['name']}"):
         assert command in text, f"{doc} must show `{command}`"
     assert "skills/sbm-cli/" in text, f"{doc} must explain copying skills/sbm-cli/ for other assistants"
+    assert "git clone https://github.com/xdoko01/sbm-cli.git" in text, (
+        f"{doc} must explain how to get the repo with the skill")
 
 
 def test_skill_is_assistant_neutral():

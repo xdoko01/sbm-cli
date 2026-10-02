@@ -29,9 +29,11 @@ sbm get 02440942     # get ticket details
 
 `skills/sbm-cli/` is a skill that teaches an AI coding assistant to install, configure,
 troubleshoot and operate `sbm` for you — including the headless (CI / agent) setup. It is
-plain Markdown (`SKILL.md` + `references/`), so any assistant can use it: copy the folder
-into your assistant's skills directory, or point the assistant at `SKILL.md` from its
-instructions file.
+plain Markdown (`SKILL.md` + `references/`), so any assistant can use it: get the folder
+from this repo (`git clone https://github.com/xdoko01/sbm-cli.git`, or
+[download the ZIP](https://github.com/xdoko01/sbm-cli/archive/refs/heads/main.zip)) — it is not
+in the PyPI package — then copy it into your assistant's skills directory, or point the
+assistant at `SKILL.md` from its instructions file.
 
 **Claude Code** can install it as a plugin instead, straight from this repo:
 

@@ -86,6 +86,26 @@ The skill is plain Markdown and is not tied to any one product:
 **Prerequisite:** an AI assistant that can run shell commands on your machine. You do *not* need
 sbm-cli installed beforehand — the assistant can install it for you.
 
+#### Getting the skill files
+
+The skill is not part of the PyPI package — `uv tool install sbm-cli` installs only the CLI. Get
+the files from the GitHub repository (Claude Code users can skip this; the plugin fetches them
+itself, see below):
+
+- **With git** — clone the repository, and later run `git pull` in it to pick up updates:
+
+  ```
+  git clone https://github.com/xdoko01/sbm-cli.git
+  ```
+
+  The skill is then in `sbm-cli/skills/sbm-cli/`.
+
+- **Without git** — download https://github.com/xdoko01/sbm-cli/archive/refs/heads/main.zip
+  (or **Code → Download ZIP** on https://github.com/xdoko01/sbm-cli) and extract it. The skill is
+  in `sbm-cli-main/skills/sbm-cli/`. Download again to update.
+
+Either way you need the whole `skills/sbm-cli/` folder, not just `SKILL.md`.
+
 #### Installing the skill
 
 **Any assistant that supports skills** (the `SKILL.md` folder format): copy the whole

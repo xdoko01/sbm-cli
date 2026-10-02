@@ -170,3 +170,23 @@ When debugging blank `--pretty` columns, check which form the endpoint returns.
 
 Use `sbm field-values ROOT_CAUSE --table <TABLE_ID>` to get the full list.
 Common values: 1673=Software bug, 2387=Configuration issue, 1700=User side issue, 1701=Other cause.
+
+## Maintaining the bundled skill (`skills/sbm-cli/`)
+
+The repo ships an `sbm-cli` skill that teaches users' AI assistants to install and operate the
+CLI. It is plain Markdown usable by any assistant (copy the folder); `.claude-plugin/` adds a
+Claude Code install path on top. Keep `SKILL.md` assistant-neutral — no Claude-only tools or syntax. It must change in the **same commit** as the code it
+describes. `tests/test_skill.py` enforces this — `uv run pytest` fails on drift.
+
+| File | How it is maintained |
+|---|---|
+| `skills/sbm-cli/references/commands.md` | **Generated** — never edit. Run `uv run python scripts/gen_skill_reference.py` after changing any command, option, argument or docstring in `sbm_cli/cli.py` |
+| `skills/sbm-cli/SKILL.md` | Hand-written. Update when install steps, setup/auth flow, env vars, global flags, error types, exit codes, output shape or a user-visible quirk changes. Every command path, global flag, env var and error type must be mentioned |
+| `skills/sbm-cli/references/config.md` | Hand-written. Update when a config key is added, renamed or changes meaning (`sbm_cli/config.py`) |
+| `.claude-plugin/plugin.json` | `version` must equal `pyproject.toml` — bump both together on release |
+| `docs/manual.md` §1.1, README "AI assistant skill" | User-facing install/usage guide for the plugin. Update when install/update commands, the plugin or marketplace name, or what the skill does changes |
+
+Any change to `sbm_cli/` (or to install/upgrade instructions in README or the manual): before
+committing, review the three skill files above against the change, regenerate the reference,
+and run `uv run pytest tests/test_skill.py`. The test checks coverage, not accuracy — a changed
+behavior with an unchanged command name still needs a manual edit to SKILL.md.

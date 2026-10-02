@@ -1,14 +1,21 @@
 # sbm-cli — Installation and Usage Manual
 
 **Version:** 0.6.0  
-**Date:** 2026-07-28  
+**Date:** 2026-10-02  
 **Platform:** Windows 10/11 · macOS 13+ · Linux (Ubuntu 22.04+)
+
+> **Recommended:** work with sbm-cli through an **AI coding assistant** loaded with the
+> `sbm-cli` skill that ships with this repo. The assistant then installs, configures,
+> troubleshoots and runs `sbm` for you — see
+> [1.1 Using sbm-cli with an AI assistant](#11-using-sbm-cli-with-an-ai-assistant-recommended).
+> The rest of this manual describes the same steps done by hand.
 
 ---
 
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
+   - 1.1 [Using sbm-cli with an AI assistant (recommended)](#11-using-sbm-cli-with-an-ai-assistant-recommended)
 2. [Prerequisites & System Requirements](#2-prerequisites--system-requirements)
    - [Installing Python](#installing-python)
    - [Installing uv](#installing-uv)
@@ -60,6 +67,84 @@ All operations output clean JSON by default, or formatted tables with the `--pre
 Every command also runs **fully non-interactively**, so sbm-cli works on a CI runner, in a container, or under an AI coding agent with no keyring daemon and no terminal — see [Section 5.7](#57-headless-machines-ci-and-ai-agents).
 
 **Supported platforms:** Windows 10/11, macOS 13 (Ventura) or newer, and Linux (Ubuntu 22.04+ or equivalent).
+
+### 1.1 Using sbm-cli with an AI assistant (recommended)
+
+The repository contains a **skill** — the folder `skills/sbm-cli/` — that teaches an AI coding
+assistant how to install, configure, upgrade, troubleshoot and operate sbm-cli. With the skill
+loaded you describe what you want in plain language, and the assistant runs the right `sbm`
+commands, reads the JSON output, and tells you the result.
+
+The skill is plain Markdown and is not tied to any one product:
+
+| File | Contents |
+|---|---|
+| `skills/sbm-cli/SKILL.md` | Main instructions: install, configure (desktop and headless), operating rules, troubleshooting. Starts with a short `name` / `description` header that tells the assistant when to use it |
+| `skills/sbm-cli/references/commands.md` | `--help` text of every command, generated from the code |
+| `skills/sbm-cli/references/config.md` | Config file reference |
+
+**Prerequisite:** an AI assistant that can run shell commands on your machine. You do *not* need
+sbm-cli installed beforehand — the assistant can install it for you.
+
+#### Installing the skill
+
+**Any assistant that supports skills** (the `SKILL.md` folder format): copy the whole
+`skills/sbm-cli/` folder — keep the `references/` subfolder next to `SKILL.md` — into the
+directory where your assistant looks for skills, per user or per project; see your assistant's
+documentation for that location. After a new release, copy the folder again to update it.
+
+**An assistant without skill support:** reference the file from its instructions or rules file,
+for example *"For anything involving SBM or the `sbm` command, read and follow
+`<path>/skills/sbm-cli/SKILL.md`"*, or paste the contents of `SKILL.md` into its custom
+instructions. Keep the `references/` folder alongside, since `SKILL.md` links to it.
+
+**Claude Code — simplest option, if you use it.** This repository is also a Claude Code plugin,
+so Claude Code can install the skill, and later update it, without any copying. Inside a
+Claude Code session:
+
+```
+/plugin marketplace add xdoko01/sbm-cli
+/plugin install sbm-cli@sbm-cli
+```
+
+or from a terminal: `claude plugin marketplace add xdoko01/sbm-cli`, then
+`claude plugin install sbm-cli@sbm-cli`. Restart Claude Code and check that
+`claude plugin list` shows `sbm-cli`. After a new release, update with
+`claude plugin marketplace update sbm-cli` and `claude plugin update sbm-cli@sbm-cli`, then
+restart. Claude Code also accepts the copied folder instead: put it in `~/.claude/skills/`
+(Windows: `C:\Users\<you>\.claude\skills\`).
+
+#### What to ask
+
+Once loaded, the skill is used when you mention sbm or SBM tickets. Examples:
+
+| You say | The assistant does |
+|---|---|
+| "Set up sbm-cli on this machine" | Checks `sbm --version`, installs with uv if missing, fixes PATH, walks you through `sbm configure setup`, then verifies with `sbm auth check` |
+| "sbm says auth_error" | Reads the error type and exit code, finds the cause (expired password, wrong username, missing `SBM_CLI_PASSWORD`, ...) and gives the fix |
+| "Set up sbm on our CI runner" | Exports your config and gives the `SBM_CLI_PASSWORD` + `sbm configure import` + `sbm auth check` steps for the headless machine |
+| "Show my open tickets" / "What's in 02440942?" | Runs `sbm list` / `sbm get` and summarises the result, with ticket links |
+| "Close 02440942 as a configuration issue" | Runs `sbm schema` and `sbm field-values` to find valid IDs, shows you the exact `sbm transition` command, and runs it only after you confirm |
+
+#### What the skill tells the assistant not to do
+
+- **Type your password.** `sbm configure setup` and `sbm configure transition` are interactive
+  wizards, so the assistant asks *you* to run them in your own terminal window. Never paste
+  your password into the chat.
+- **Change a ticket without asking.** Every transition is shown to you first and runs only after
+  an explicit yes. The assistant also asks whether you want to add a comment (`SOLUTION_STEPS`).
+- **Guess IDs.** Transition IDs come from your config; relational field values (owners, root
+  causes, return reasons) are looked up with `sbm field-values`.
+
+These are instructions to the assistant, not technical locks — keep your assistant's own
+approval prompts for shell commands switched on.
+
+#### Keeping skill and CLI in step
+
+The skill describes one sbm-cli version, named at the top of `references/commands.md`. When you
+upgrade the CLI (`uv tool upgrade sbm-cli`, see [Section 8](#8-upgrading--uninstalling)), update
+the skill too. If the installed `sbm` is older than the version the skill describes, the
+assistant suggests the upgrade.
 
 ---
 

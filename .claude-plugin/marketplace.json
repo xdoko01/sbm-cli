@@ -1,0 +1,14 @@
+{
+  "name": "sbm-cli",
+  "description": "sbm-cli plugin marketplace \u2014 the sbm-cli skill for Claude Code.",
+  "owner": {
+    "name": "Otakar Dokoupil"
+  },
+  "plugins": [
+    {
+      "name": "sbm-cli",
+      "source": "./",
+      "description": "Skill for installing, configuring and operating sbm-cli, the command-line client for the SBM 12.0 JSON API."
+    }
+  ]
+}
